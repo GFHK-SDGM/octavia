@@ -168,7 +168,8 @@ let VoiceBank = class {
 				};
 				break;
 			};
-			case "sd": {
+			case "sd":
+			case "rhc": {
 				switch (msb) {
 					case 121: {
 						args[0] = 96;
@@ -1041,7 +1042,8 @@ let VoiceBank = class {
 					ending = "?";
 					break;
 				};
-				case "g2": {
+				case "g2":
+				case "rhc": {
 					bankName = "GM2 Ext?";
 					ending = "?";
 					break;

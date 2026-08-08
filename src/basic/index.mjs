@@ -604,6 +604,14 @@ const RootDisplay = class extends CustomEventSource {
 							break;
 						};
 					};
+				} else if (["gs", "sc", "mt"].indexOf(standard) > -1) {
+					switch (voiceObject.sid[0]) {
+						case 126:
+						case 127: {
+							data = upThis.sysBm.getBm("cat_mt32");
+							break;
+						};
+					};
 				};
 				if (!data) {
 					if (chType) {
@@ -624,7 +632,25 @@ const RootDisplay = class extends CustomEventSource {
 			};
 		};
 		// Direct selection
-		data = data || upThis.getVoxBm(voiceObject, bmType);
+		let useSelection = true;
+		switch (voiceObject.mode) {
+			case "gs":
+			case "sc":
+			case "mt32": {
+				switch (voiceObject.sid[0]) {
+					case 126:
+					case 127: {
+						useSelection = false;
+						break;
+					};
+				};
+				break;
+			};
+		};
+		//console.debug(useSelection);
+		if (useSelection) {
+			data = data || upThis.getVoxBm(voiceObject, bmType);
+		};
 		if (!data) {
 			if (!upThis.sysBm) {
 				return;
@@ -656,6 +682,18 @@ const RootDisplay = class extends CustomEventSource {
 						case 48:
 						case 82: {
 							data = upThis.sysBm.getBm("cat_xg");
+							break;
+						};
+					};
+					break;
+				};
+				case "gs":
+				case "sc":
+				case "mt32": {
+					switch (voiceObject.sid[0]) {
+						case 126:
+						case 127: {
+							data = upThis.sysBm.getBm("cat_mex");
 							break;
 						};
 					};
