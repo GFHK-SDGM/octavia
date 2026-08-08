@@ -276,21 +276,21 @@ let showTrue = function (data, prefix = "", suffix = "", length = 2) {
 	return data ? `${prefix}${data.toString().padStart(length, "0")}${suffix}` : "";
 };
 
-let allocatedPorts = 8;
+const allocatedPorts = 16, allocatedDrums = 8;
 const allocated = {
 	port: allocatedPorts,
 	ch: allocatedPorts << 4, // channels
 	chShift: Math.ceil(Math.log2(allocatedPorts)) + 4,
 	cc: ccAccepted.length, // control changes
 	nn: 128, // notes per channel
-	pl: 512, // polyphony
+	pl: 768, // polyphony
 	tr: 256, // tracks
 	cmt: 14, // C/M timbre storage size
 	rpn: 6,
 	rpnt: 4, // the real size of RPN registers
 	nrpn: useNormNrpn.length,
 	ace: 8, // active custom effect
-	drm: 8, // Drum setup slots
+	drm: allocatedDrums, // Drum setup slots
 	dpn: useDrumNrpn.length, // Drum setup params
 	dnc: 128, // drum note 0 to 127
 	ext: 3, // extensions
@@ -432,6 +432,14 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 	CH_DRUM6 = 7;
 	CH_DRUM7 = 8;
 	CH_DRUM8 = 9;
+	CH_DRUM9 = 10;
+	CH_DRUM10 = 11;
+	CH_DRUM11 = 12;
+	CH_DRUM12 = 13;
+	CH_DRUM13 = 14;
+	CH_DRUM14 = 15;
+	CH_DRUM15 = 16;
+	CH_DRUM16 = 17;
 	DUMP_ALL = 0;
 	DUMP_ONCE = 1;
 	DUMP_MODE = 2;
@@ -1736,6 +1744,15 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 	invokeSysExIndicator() {
 		this.dispatchEvent("mupromptex", this.#lastSysExSize);
 	};
+	checkChValidity(part) {
+		if (typeof part !== "number") {
+			throw(new TypeError(`CH${part} is not valid.`));
+			return;
+		} else if (part < 0 || part >= allocated.ch) {
+			throw(new RangeError(`CH${part + 1} is not valid.`));
+			return;
+		};
+	};
 	getActive() {
 		let result = this.#chActive;
 		//if (this.#mode === modeMap.mt32) {
@@ -1744,9 +1761,11 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return result;
 	};
 	getChActive(part) {
+		this.checkChValidity(part);
 		return this.#chActive[part];
 	};
 	setChActive(part, active = 0) {
+		this.checkChValidity(part);
 		if (this.#chActive[part] !== active) {
 			this.dispatchEvent("channeltoggle", {
 				part,
@@ -1760,6 +1779,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		this.#cc.fill(0, allocated.chcc, allocated.chcc << 1);
 	};
 	getChCc(part, cc) {
+		this.checkChValidity(part);
 		let upThis = this;
 		if (ccAccepted.indexOf(cc) < 0) {
 			throw(new RangeError(`cc${cc} is not an accepted control change.`));
@@ -1781,6 +1801,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return result;
 	};
 	setChCc(part, cc, value) {
+		this.checkChValidity(part);
 		let upThis = this;
 		if (ccAccepted.indexOf(cc) < 0) {
 			throw(new Error("CC number not accepted"));
@@ -1814,6 +1835,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		upThis.#cc.fill(0, start, start + allocated.cc);
 	};
 	getChCcWritten(part, cc) {
+		this.checkChValidity(part);
 		let upThis = this;
 		if (ccAccepted.indexOf(cc) < 0) {
 			throw(new RangeError(`cc${cc} is not an accepted control change.`));
@@ -1822,12 +1844,15 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return result;
 	};
 	getChSource(part) {
+		this.checkChValidity(part);
 		return this.#chReceive[part];
 	};
 	getChType(part) {
+		this.checkChValidity(part);
 		return this.#chType[part];
 	};
 	setChType(part, type, mode = 0, disableMsbSet = false) {
+		this.checkChValidity(part);
 		type &= 15;
 		let upThis = this;
 		mode = mode || upThis.getChModeId(part);
@@ -1950,10 +1975,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 			throw(new RangeError(`Invalid voice primitive component "${component}"`));
 			return;
 		};
-		if (typeof part !== "number" || part < 0 || part >= allocated.ch) {
-			throw(new RangeError(`Invalid part number: CH${part + 1}`));
-			return;
-		};
+		this.checkChValidity(part);
 		let upThis = this;
 		let result = upThis.#prg[(component << allocated.chShift) | part];
 		switch (component) {
@@ -1979,6 +2001,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		this method lays out the primitives in the order listed below:
 		cc0/Bank MSB, program number, cc32/Bank LSB
 		*/
+		this.checkChValidity(part);
 		let upThis = this;
 		let primBuf = new Uint8Array(3);
 		primBuf[1] = upThis.#prg[part];
@@ -1993,6 +2016,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		upThis.dispatchEvent("voice", {part});
 	};
 	getChCvnBuffer(part, maxBufferLength = allocated.cvn) {
+		this.checkChValidity(part);
 		// A buffer that can be written directly
 		if (maxBufferLength > allocated.cvn || maxBufferLength < 1) {
 			throw(new RangeError("Invalid custom voice name buffer length"));
@@ -2001,12 +2025,14 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return this.#cvnBuffer.subarray(pointer, pointer + maxBufferLength);
 	};
 	getChCvnRegister(part, regIdx) {
+		this.checkChValidity(part);
 		if (regIdx >= allocated.cvn || regIdx < 0) {
 			throw(new RangeError("Invalid custom voice name register"));
 		};
 		return this.#cvnBuffer[cvnOffTable[part] + regIdx];
 	};
 	setChCvnRegister(part, regIdx, value = 32) {
+		this.checkChValidity(part);
 		if (regIdx >= allocated.cvn || regIdx < 0) {
 			throw(new RangeError("Invalid custom voice name register"));
 		};
@@ -2018,6 +2044,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		this.#cvnBufferIsWritten[part] = 0;
 	};
 	getChCvnString(part, preserveEnd) {
+		this.checkChValidity(part);
 		let result = decoderL9.decode(this.getChCvnBuffer(part));
 		if (!preserveEnd) {
 			result = result.trimEnd();
@@ -2025,9 +2052,11 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return result;
 	};
 	getChCvnIsWritten(part) {
+		this.checkChValidity(part);
 		return this.#cvnBufferIsWritten[part];
 	};
 	getChVoice(part) {
+		this.checkChValidity(part);
 		let upThis = this;
 		let voice = upThis.getVoice(...upThis.getChPrimitives(part), upThis.getChMode(part), upThis.modelEx[upThis.getChMode(part)]?.map ?? 0);
 		if (upThis.#bnCustom[part]) {
@@ -2052,9 +2081,11 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return voice;
 	};
 	getChRawPitch(part) {
+		this.checkChValidity(part);
 		return this.#pitch[part];
 	};
 	getChPitch(part) {
+		this.checkChValidity(part);
 		let upThis = this;
 		let rpnOff = part * allocated.rpn;
 		let pitchBendRange = upThis.#rpn[rpnOff];
@@ -2099,9 +2130,11 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		this.dispatchEvent(`efx${effectSlots[slot]}`, {id, hidden});
 	};
 	getChEffectSink(part) {
+		this.checkChValidity(part);
 		return this.#efxTo[part];
 	};
 	setChEffectSink(part, efxSlot = 0) {
+		this.checkChValidity(part);
 		// EFX slot 0 does NOT mean it's reverb, but rather "no insertion effects"
 		// Octavia assumes that reverb is always enabled for the whole module
 		let upThis = this;
@@ -2313,6 +2346,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return this.#ace;
 	};
 	getChAce(part = 0, aceSlot = 0) {
+		this.checkChValidity(part);
 		// Get channel ACE value
 		if (aceSlot < 0 || aceSlot >= allocated.ace) {
 			throw(new RangeError(`No such ACE slot`));
@@ -2417,14 +2451,24 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		});
 		// Channel types
 		upThis.#chType.fill(upThis.CH_MELODIC);
-		upThis.#chType[9] = upThis.CH_DRUM1;
+		for (let port = 0; port < allocated.port; port ++) {
+			// Yamaha XG multi-port drum part assigning.
+			let partType = upThis.CH_DRUMS;
+			if (((port >> 1) & 1) === 0) {
+				partType = ((port >> 2) << 2) + (((port & 1) + 1) << 1);
+			};
+			upThis.#chType[(port << 4) | 9] = partType;
+			//console.debug(port, drumType);
+		};
+		// Equivalent to the code below with only 8 ports and 8 drums.
+		/*upThis.#chType[9] = upThis.CH_DRUM1;
 		upThis.#chType[25] = upThis.CH_DRUM3;
 		upThis.#chType[41] = upThis.CH_DRUMS;
 		upThis.#chType[57] = upThis.CH_DRUMS;
 		upThis.#chType[73] = upThis.CH_DRUM5;
 		upThis.#chType[89] = upThis.CH_DRUM7;
 		upThis.#chType[105] = upThis.CH_DRUMS;
-		upThis.#chType[121] = upThis.CH_DRUMS;
+		upThis.#chType[121] = upThis.CH_DRUMS;*/
 		// Drum source channels
 		for (let ds = 0; ds < allocated.drm; ds ++) {
 			upThis.#drumFirstWrite[ds << 1] = 0; // active or not
@@ -2521,6 +2565,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return;
 	};
 	setChModeId(part, modeId) {
+		this.checkChValidity(part);
 		// Per-channel mode
 		let upThis = this;
 		if (typeof part !== "number" || part < 0 || part >= allocated.ch) {
@@ -2543,6 +2588,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		return modeIdx[this.getChModeId(part, noFallback)];
 	};
 	getChModeId(part, noFallback) {
+		this.checkChValidity(part);
 		if (noFallback) {
 			return this.#chMode[part] || this.#portMode[part >> 4];
 		} else {
@@ -2637,6 +2683,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		};
 	};
 	getChDrumFirstWrite(part) {
+		this.checkChValidity(part);
 		let upThis = this;
 		let chType = upThis.#chType[part];
 		if (chType < 2) {
