@@ -2955,57 +2955,71 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 			return;
 		};
 		const upThis = this;
-		if (ingressEvent.type > 14) {
-			// System messages
-			let mappedType = ingressEvent.type;
-			if (mappedType === 240) {
-				mappedType = 15;
-			};
-			if (mappedType === 15) {
-				switch (ingressEvent.data.constructor) {
-					case Uint8Array:
-					case Uint8ClampedArray: {
-						break;
-					};
-					default: {
-						ingressEvent.data = Uint8Array.from(ingressEvent.data);
-					};
-				};
-			};
-			const eventRunner = upThis.#chEventRun.get(ingressEvent.type);
-			if (typeof eventRunner === "function") {
-				eventRunner.call(upThis, ingressEvent);
-			} else {
-				console.warn(`Received an unknown type ${ingressEvent.type} message.`);
-			};
-		} else if (ingressEvent.type >= 8) {
-			const msgTypeSpec = eventTypes[ingressEvent.type]?.length > 0 ? `${eventTypes[ingressEvent.type]}${(0b11000 >> (ingressEvent.type - 8)) ? ingressEvent.data[0] : ""}` : `unknown type ${ingressEvent.type}`;
-			if (typeof ingressEvent.ch === "number") {
-				// Channel messages
-				const mappedCh = (ingressEvent?.port < 16) ? (ingressEvent.port << 4) | ingressEvent.ch : upThis.chRedir(ingressEvent.ch, (ingressEvent.track < 16384) ? ingressEvent.track : 0, false);
-				const eventRunner = upThis.#chEventRun.get(ingressEvent.type);
-				if (typeof eventRunner === "function") {
-					let noReceipient = true;
-					for (const mappedPart of upThis.#receiveTree[mappedCh] ?? []) {
-						noReceipient = false;
-						eventRunner.call(upThis, ingressEvent, mappedPart);
-					};
-					if (noReceipient) {
-						let msgPortCh = `CH${ingressEvent.ch + 1}`;
-						if (ingressEvent.port < 255) {
-							msgPortCh += ` on port ${ingressEvent.port}`;
+		let warningMessage;
+		switch (ingressEvent.group) {
+			case "mma.midiEvent": {
+				let mappedType = ingressEvent.type;
+				if (mappedType >= 240) {
+					// System messages
+					switch (ingressEvent.data.constructor) {
+						case Uint8Array:
+						case Uint8ClampedArray: {
+							break;
 						};
-						msgPortCh += ` (CH${mappedCh})`;
-						console.warn(`A ${msgTypeSpec} message sent to ${msgPortCh} had no receipient.`);
+						default: {
+							if (ingressEvent?.length > 0) {
+								ingressEvent.data = Uint8Array.from(ingressEvent.data);
+							};
+						};
+					};
+					const eventRunner = upThis.#chEventRun.get(mappedType);
+					if (typeof eventRunner === "function") {
+						eventRunner.call(upThis, ingressEvent);
+					} else {
+						warningMessage = `Received an unknown type ${ingressEvent.type} message.`;
+					};
+				} else if (mappedType >= 15) {
+					warningMessage = `Received an unknown type ${ingressEvent.type} message.`;
+				} else if (mappedType >= 8) {
+					const msgTypeSpec = eventTypes[mappedType]?.length > 0 ? `${eventTypes[mappedType]}${(0b11000 >> (mappedType - 8)) ? ingressEvent.data[0] : ""}` : `unknown type ${mappedType}`;
+					if (typeof ingressEvent.ch === "number") {
+						// Channel messages
+						const mappedCh = (ingressEvent?.port < 16) ? (ingressEvent.port << 4) | (ingressEvent.ch & 15) : upThis.chRedir(ingressEvent.ch, (ingressEvent.track < 16384) ? ingressEvent.track : 0, false);
+						const eventRunner = upThis.#chEventRun.get(mappedType);
+						if (typeof eventRunner === "function") {
+							let norecipient = true;
+							for (const mappedPart of upThis.#receiveTree[mappedCh] ?? []) {
+								norecipient = false;
+								eventRunner.call(upThis, ingressEvent, mappedPart);
+							};
+							if (norecipient) {
+								let msgPortCh = `CH${ingressEvent.ch + 1}`;
+								if (ingressEvent.port < 255) {
+									msgPortCh += ` on port ${ingressEvent.port + 1}`;
+								};
+								msgPortCh += ` (CH${mappedCh})`;
+								console.warn(`A ${msgTypeSpec} message sent to ${msgPortCh} had no recipient.`);
+							};
+						} else {
+							warningMessage = `Event type ${ingressEvent.type} does not have a valid runner.`;
+						};
+					} else {
+						warningMessage = `Received a ${msgTypeSpec} message without a specified channel.`;
 					};
 				} else {
-					console.warn(`Event type ${ingressEvent.type} does not have a valid runner.`);
+					warningMessage = `Received an unknown type ${ingressEvent.type} message.`;
 				};
-			} else {
-				console.warn(`Received a ${msgTypeSpec} message without a specified channel.`);
+				break;
 			};
-		} else {
-			console.warn(`Received an unknown type ${ingressEvent.type} message.`);
+			default: {
+				warningMessage = `Unknown message group "${ingressEvent.group}".`;
+			};
+		};
+		if (warningMessage?.length > 0) {
+			console.warn(warningMessage);
+			if (typeof ingressEvent.offset === "number") {
+				console.debug(`Binary stream offset at 0x${ingressEvent.offset.toString(16).padStart(6, "0")}.`);
+			};
 		};
 		if (upThis.#metaTexts.length > upThis.maxKeepMetaCount) {
 			upThis.#metaTexts.splice(upThis.maxKeepMetaCount >> 1, upThis.#metaTexts.length + 1 - (upThis.maxKeepMetaCount >> 1));
