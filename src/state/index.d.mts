@@ -17,9 +17,9 @@ declare interface OctaviaTimeProvider {
 
 /** Defines what's the range of clearing voice definitions. */
 declare interface OctaviaBankClearOptions {
-	msb?: number | number[];
-	prg?: number | number[];
-	lsb?: number | number[];
+	msb?: number|number[];
+	prg?: number|number[];
+	lsb?: number|number[];
 }
 
 /** The returned voice object. */
@@ -89,7 +89,7 @@ export class VoiceBank {
 /** Time multiplexer. */
 export class TimeMuxer {
 	/** Attach a source to the time multiplexer. */
-	attach(source: HTMLMediaElement | OctaviaTimeProvider): void;
+	attach(source: HTMLMediaElement|OctaviaTimeProvider): void;
 	/** Detach the existing source from this time multiplexer. */
 	detach(): void;
 	/** Returns the current real time in milliseconds. */
@@ -100,7 +100,7 @@ export class TimeMuxer {
 	readonly currentTime: number;
 	/** Returns the current multiplexed time in milliseconds, but rounded down. */
 	now(): number;
-	constructor(clockSource?: HTMLMediaElement | OctaviaTimeProvider);
+	constructor(clockSource?: HTMLMediaElement|OctaviaTimeProvider);
 }
 
 /** When `true`, the code should be in a debugging state. */
@@ -148,6 +148,8 @@ export declare const allocated: {
 	readonly vxPrim: number;
 	/** Value of the invalid part. */
 	readonly invalidCh: number;
+	/** Sentinel value for randomised panning. */
+	readonly randomPan: number;
 	/** What does this do? I forgot ;P */
 	readonly redir: number;
 }
@@ -156,6 +158,16 @@ export declare const allocated: {
 export declare const overrides: {
 	/** The value taken to signify bank 0. */
 	readonly bank0: number;
+}
+
+/** A fake EPROM for data storage and retrieval only. */
+export class OctaviaFakeEPROM {
+	/** The offset of where the read/write pointer should begin. Defaults to and should be reset to `0`. */
+	offset: number;
+	/** Data buffer target of the fake EPROM. */
+	data: Uint8Array;
+	/** @param size Size of the fake EPROM in bytes. */
+	constructor(size: number);
 }
 
 /** The state processing engine of Octavia as a virtual device. */
@@ -337,6 +349,8 @@ export class OctaviaDevice {
 	readonly baseBank: VoiceBank;
 	/** The user voice bank intended for editable voices/instruments in RAM. */
 	readonly userBank: VoiceBank;
+	/** The attached fake EPROM object. */
+	eprom?: OctaviaFakeEPROM;
 	/** When `true`, Octavia will be re-initialized on every mode switch. */
 	initOnReset: boolean;
 	/** Specifies the customized EFX name from KORG AI² synths. */
@@ -430,7 +444,7 @@ export class OctaviaDevice {
 	* @param offset How many spaces should preceed the text.
 	* @param delay How long until the current letter display expires.
 	*/
-	setLetter(data: Uint8Array | Uint8ClampedArray, source?: string, offset?: number, delay?: number): void;
+	setLetter(data: Uint8Array|Uint8ClampedArray, source?: string, offset?: number, delay?: number): void;
 	/** Set the current letter display.
 	* @param data The source buffer of the letter display text.
 	* @param source The call source of this method. Used for debugging.
@@ -554,13 +568,13 @@ export class OctaviaDevice {
 	/** Copy the setup of a part from another part. Needs rethinking and reworking. */
 	copyChSetup(sourcePart: number, targetPart: number, failWhenActive?: boolean): void;
 	/** Get the first write part for a drum slot. */
-	getDrumFirstWrite(part: number): number;
+	getDrumFirstWrite(drumSet: number): number|null;
 	/** Set the first write part for a drum slot. Part setup copying will happen on subsequent parts of the same slot.
 	* @param disable When `true`, the first write status of the part will be reset.
 	*/
 	setDrumFirstWrite(part: number, disable?: boolean): void;
 	/** Get the first write part for a part's drum slot. */
-	getChDrumFirstWrite(part: number): number;
+	getChDrumFirstWrite(part: number): number|null;
 	/** Switch the global mode.
 	* - `0`: Change only when without a defined mode. No reset.
 	* - `1`: Change. Reset when without a defined mode.
@@ -585,7 +599,7 @@ export class OctaviaDevice {
 	/** (WIP) Directly execute an undecoded MIDI event on a port.
 	* @param port The port number. `255` means "unset".
 	*/
-	runRaw(eventBuffer: Uint8Array | Uint8ClampedArray, port?: number): void;
+	runRaw(eventBuffer: Uint8Array|Uint8ClampedArray, port?: number): void;
 	/** Load custom user voices from files in supported formats.
 	*
 	* Supported formats:
@@ -603,5 +617,5 @@ export class OctaviaDevice {
 	* @param format The format specifier.
 	* @param blob The `ReadableStream` instance of the file.
 	*/
-	streamBank(format: string, blob: ReadableStream<Uint8Array | Uint8ClampedArray>): Promise<void>;
+	streamBank(format: string, blob: ReadableStream<Uint8Array|Uint8ClampedArray>): Promise<void>;
 }

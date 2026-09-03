@@ -38,14 +38,13 @@ import {
 	toDecibel,
 	gsChecksum,
 	korgFilter,
-	korgUnpack,
-	korgPack,
 	halfByteFilter,
 	halfByteUnpack,
 	x5dSendLevel,
 	ascii64Dec,
 	getDebugState,
-	bufferToDHex
+	bufferToDHex,
+	bufferToBracketed
 } from "./utils.js";
 import {
 	contrastCache
@@ -54,6 +53,12 @@ import {ChordDict} from "../chord/index.mjs";
 import {
 	NakedMIDIEvent
 } from "../micc/index.mjs";
+import {
+	BinaryBufferCodecs,
+	BinaryStreamCodecs,
+	IterableUtils
+} from "./utils/codec.mjs";
+import OctaviaFakeEPROM from "./eprom.mjs";
 //import { Uint8 } from "../../libs/midi-parser@colxi/main.min.js";
 
 const modeIdx = [
@@ -63,7 +68,7 @@ const modeIdx = [
 	"ns5r", "x5d", "05rw",
 	"k11", "sg", "sd", "pa", "rhc",
 	"krs", "s90es", "motif", "cs6x", "trin",
-	"an1x", "cs1x"
+	"an1x", "cs2x"
 ],
 modeAdapt = {
 	"gm2": "g2",
@@ -112,7 +117,6 @@ let modeDetailsData = { // subMsb, subLsb, drumMsb, defaultMsb, defaultLsb
 	"cs6x": [0, 0, 127, 0, 0],
 	"trin": [0, 0, 61, 0, 0],
 	"an1x": [36, 3, 127, 0, 0],
-	"cs1x": [0, 0, 127, 63, 0],
 	"cs2x": [0, 0, 127, 63, 0]
 };
 const drumChannels = [9, 25, 41, 57, 73, 89, 105, 121];
@@ -301,7 +305,8 @@ const allocated = {
 	cvn: 12, // custom voice names
 	redir: 32,
 	vxPrim: 3,
-	invalidCh: 255
+	invalidCh: 255,
+	randomPan: 129
 };
 allocated.chcc = allocated.cc * allocated.ch;
 const overrides = {
@@ -539,7 +544,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 			"invDisp": false,
 			"peakHold": 1
 		},
-		"cs1x": {
+		"cs2x": {
 			"perfCh": 0
 		},
 		"kross": {
@@ -587,7 +592,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 	#trkAsReq = new Uint8Array(allocated.tr); // Track Assignment request
 	baseBank = new VoiceBank("gm2", "ns5r", "xg", "gs", "sd", "gmega", "plg-vl", "plg-pf", "plg-dx", "plg-an", "plg-dr", "plg-sg", "kross", "s90es", "cs2x", "pa", "ymh", "gm-extra"); // Load all possible voice banks
 	userBank = new VoiceBank("gm2"); // User-defined bank for MT-32, X5DR and NS5R
-	//bankProps = new SheetD;
+	eprom = new OctaviaFakeEPROM(4194304);
 	initOnReset = false; // If this is true, Octavia will re-init upon mode switches
 	aiEfxName = "";
 	polyIndexShrink = true;
@@ -1361,7 +1366,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 									case modeMap.mt32:
 									case modeMap.s90es:
 									case modeMap.motif:
-									case modeMap.cs1x:
+									case modeMap.cs2x:
 									case modeMap.cs6x: {
 										switch (upThis.getChCc(part, 100)) {
 											case 1:
@@ -1495,9 +1500,21 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 			if (getDebugState()) {
 				console.debug(`T:${det.track} C:${part} P:${det.data}`);
 			};
-			if (upThis.getChModeId(part) === modeMap.xg) {
-				if (upThis.#chType[part]) {
-					upThis.setDrumFirstWrite(part);
+			const partType = upThis.getChType(part, 0),
+			partPrimNumber = upThis.getChPrimitiveNumbers(part),
+			partDrumFirstWrite = upThis.getChDrumFirstWrite(part);
+			switch (upThis.getChModeId(part)) {
+				case modeMap.xg:
+				case modeMap.gs:
+				case modeMap.sc: {
+					if (partType !== upThis.CH_MELODIC) {
+						//console.debug(partType, partDrumFirstWrite, partPrimNumber.toString(16));
+						upThis.setDrumFirstWrite(part);
+						if (typeof partDrumFirstWrite === "number" && upThis.getChPrimitiveNumbers(partDrumFirstWrite) !== partPrimNumber) {
+							console.info(`CH${part + 1} has overrode the drums on CH${partDrumFirstWrite + 1}.`);
+						};
+					};
+					break;
 				};
 			};
 		},
@@ -1571,6 +1588,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		}
 	};
 	// Channel message runners
+	/** @type {Map<number, (NakedMIDIEvent, number) => {}>} */
 	#chEventRun = new Map();
 	// SysEx manufacturer table
 	#seMan = {
@@ -1584,7 +1602,27 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 			// D-50: [20, CmdId]
 			// C/M: [22, CmdId]
 			// GS: [66, CmdId, HH, MM, LL, ...DD, Checksum]
-			if (msg[0] < 16) {
+			// GSSys: [69, CmdId, HH, MM, LL, ...DD, Checksum]
+			// SC EPROM: [69, 0, CmdId, HH, MM, LL, ...DD, Checksum]
+			// SD-20/80/90: [0, 72, CmdId, HH, HM, LM, LL, ...DD, Checksum]
+			const sentCs = msg[msg.length - 1];
+			let calcCs = 256;
+			let rolandCmdByteIdx = msg.indexOf(18) + 1; // DT1
+			if (rolandCmdByteIdx <= 0) {
+				rolandCmdByteIdx = msg.indexOf(17) + 1; // RQ1
+			};
+			if (rolandCmdByteIdx > 0) {
+				calcCs = gsChecksum(msg.subarray(rolandCmdByteIdx, msg.length - 1));
+			};
+			if (calcCs >= 256 || calcCs === sentCs) {
+				if (rolandCmdByteIdx <= 0) {
+					console.debug(`Received a Roland message without checksum.\n${bufferToBracketed(msg)}`);
+				};
+				this.#seGs.run(msg.subarray(0, msg.length - 1), track, id);
+			} else {
+				console.warn(`Bad Roland checksum ${sentCs} - should be ${calcCs}.\n${bufferToBracketed(msg, rolandCmdByteIdx, 1)}`);
+			};
+			/*if (msg[0] < 16) {
 				if (msg[1] === 72) {
 					let sentCs = msg[msg.length - 1];
 					let calcCs = gsChecksum(msg.subarray(3, msg.length - 1));
@@ -1605,7 +1643,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 				} else {
 					console.warn(`Bad GS checksum ${sentCs} - should be ${calcCs}.`);
 				};
-			};
+			};*/
 		},
 		66: (id, msg, track) => {
 			// Korg
@@ -2014,6 +2052,10 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		primBuf[0] = upThis.getChPrimitive(part, 1, useSubDb);
 		primBuf[2] = upThis.getChPrimitive(part, 2, useSubDb);
 		return primBuf;
+	};
+	getChPrimitiveNumbers(part, useSubDb) {
+		const buf = this.getChPrimitives(part, useSubDb);
+		return (buf[1] << 16) | (buf[0] << 8) | buf[2];
 	};
 	pushChPrimitives(part) {
 		let upThis = this;
@@ -2511,8 +2553,8 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		upThis.modelEx.sc.invBar = false;
 		upThis.modelEx.sc.invDisp = false;
 		upThis.modelEx.sc.peakHold = 1;
-		// Reset CS1x-exclusive params
-		upThis.modelEx.cs1x.perfCh = 0;
+		// Reset CS2x-exclusive params
+		upThis.modelEx.cs2x.perfCh = 0;
 		// Reset MT-32 params
 		upThis.modelEx.mt32.writeTimbre = true;
 		for (let ch = 0; ch < allocated.ch; ch ++) {
@@ -2690,17 +2732,19 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 	};
 	getChDrumFirstWrite(part) {
 		this.checkChValidity(part);
-		let upThis = this;
-		let chType = upThis.#chType[part];
+		const upThis = this;
+		const chType = upThis.#chType[part];
 		if (chType < 2) {
 			return;
 		};
-		let ds = chType - 2;
-		return upThis.#drumFirstWrite.subarray(ds << 1, (ds + 1) << 1);
+		const ds = chType - 2;
+		const dsData = upThis.#drumFirstWrite.subarray(ds << 1, (ds + 1) << 1);
+		return dsData[0] > 0 ? dsData[1] : null;
 	};
 	getDrumFirstWrite(ds) {
 		if (ds >= 0 && ds < allocated.drm) {
-			return this.#drumFirstWrite.subarray(ds << 1, (ds + 1) << 1);
+			const dsData = this.#drumFirstWrite.subarray(ds << 1, (ds + 1) << 1);
+			return dsData[0] > 0 ? dsData[1] : null;
 		};
 	};
 	switchMode(mode, forced = 0, setTarget = false) {
@@ -2794,7 +2838,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 						break;
 					};
 					case modeMap.xg:
-					case modeMap.cs1x: {
+					case modeMap.cs2x: {
 						efxDefault = [1, 0, 65, 0, 5, 0, 64, 0, 64, 0, 64, 0, 64, 0, 0, 255];
 						efxBlank = [64, 0];
 						break;
@@ -2984,24 +3028,35 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 					const msgTypeSpec = eventTypes[mappedType]?.length > 0 ? `${eventTypes[mappedType]}${(0b11000 >> (mappedType - 8)) ? ingressEvent.data[0] : ""}` : `unknown type ${mappedType}`;
 					if (typeof ingressEvent.ch === "number") {
 						// Channel messages
-						const mappedCh = (ingressEvent?.port < 16) ? (ingressEvent.port << 4) | (ingressEvent.ch & 15) : upThis.chRedir(ingressEvent.ch, (ingressEvent.track < 16384) ? ingressEvent.track : 0, false);
-						const eventRunner = upThis.#chEventRun.get(mappedType);
-						if (typeof eventRunner === "function") {
-							let norecipient = true;
-							for (const mappedPart of upThis.#receiveTree[mappedCh] ?? []) {
-								norecipient = false;
-								eventRunner.call(upThis, ingressEvent, mappedPart);
-							};
-							if (norecipient) {
-								let msgPortCh = `CH${ingressEvent.ch + 1}`;
-								if (ingressEvent.port < 255) {
-									msgPortCh += ` on port ${ingressEvent.port + 1}`;
+						let mappedCh = null;
+						if (ingressEvent?.port < 16) {
+							mappedCh = (ingressEvent.port << 4) | (ingressEvent.ch & 15);
+						} else if (ingressEvent.ch < allocated.ch) {
+							mappedCh = upThis.chRedir(ingressEvent.ch, (ingressEvent.track < 4096) ? ingressEvent.track : 0, false);
+						} else {
+							throw(new Error(`Invalid event channel ${ingressEvent.ch}.`));
+						};
+						if (mappedCh < allocated.ch) {
+							const eventRunner = upThis.#chEventRun.get(mappedType);
+							if (typeof eventRunner === "function") {
+								let norecipient = true;
+								for (const mappedPart of upThis.#receiveTree[mappedCh] ?? []) {
+									norecipient = false;
+									eventRunner.call(upThis, ingressEvent, mappedPart);
 								};
-								msgPortCh += ` (CH${mappedCh})`;
-								console.warn(`A ${msgTypeSpec} message sent to ${msgPortCh} had no recipient.`);
+								if (norecipient) {
+									let msgPortCh = `CH${ingressEvent.ch + 1}`;
+									if (ingressEvent.port < 16) {
+										msgPortCh += ` on port ${ingressEvent.port + 1}`;
+									};
+									msgPortCh += ` (CH${mappedCh})`;
+									console.warn(`A ${msgTypeSpec} message sent to ${msgPortCh} had no recipient.`);
+								};
+							} else {
+								warningMessage = `Event type ${ingressEvent.type} does not have a valid runner.`;
 							};
 						} else {
-							warningMessage = `Event type ${ingressEvent.type} does not have a valid runner.`;
+							warningMessage = `Event type ${ingressEvent.type} does not have a valid channel.`;
 						};
 					} else {
 						warningMessage = `Received a ${msgTypeSpec} message without a specified channel.`;
@@ -4052,7 +4107,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 					}, false, false, () => {
 						upThis.setChCc(part, 7, e); // volume
 					}, false, false, () => {
-						upThis.setChCc(part, 10, e || 128); // pan
+						upThis.setChCc(part, 10, e || allocated.randomPan); // pan
 					}, false, false, () => {
 						upThis.setChCc(part, 128, e); // dry level
 						upThis.assignChAce(part, 128);
@@ -4802,7 +4857,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 						return e - 64;
 					},
 					() => {
-						return e || 128;
+						return e || allocated.randomPan;
 					},
 					() => {
 						return e;
@@ -4879,7 +4934,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 					}, false
 					, false
 					, () => {
-						upThis.setChCc(part, 10, e || 128);
+						upThis.setChCc(part, 10, e || allocated.randomPan);
 					}, false
 					, false
 					, () => {
@@ -5261,6 +5316,22 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 			offset = byteOffset * 6 - ((byteOffset * 2428 >> 16) << 1); // Used for emitting events than for internal processing.
 			upThis.dispatchEvent("screen", {type: "sc8850", offset, data: screenBuffer});
 			getDebugState() && console.debug(`SC-8850 screen dump: bundle ${bundleId + 1}, range ${desiredLengthHead}~${desiredLengthTail}`);
+		}).add([69, 0, 18], (msg, track, id) => {
+			// SoundCanvas EPROM R/W
+			if (msg.length < 4) {
+				console.info(`Insufficient EPROM address.`);
+				return;
+			};
+			if (id !== 0) {
+				console.info(`Unknown EPROM device ID ${id}.`);
+				return;
+			};
+			const region = msg[0], offset = (msg[1] << 14) | (msg[2] << 7) | msg[3];
+			//console.debug(bufferToBracketed(msg, 4));
+			if (upThis.eprom) {
+				upThis.eprom.data.set(BinaryBufferCodecs.decodeKorg(msg.subarray(4)), offset);
+			};
+			getDebugState() && console.debug(`Roland EPROM region ${region} writes to 0x${offset.toString(16)}.`);
 		});
 		// GS Part setup
 		// I wanted this to also be written in a circular structure
@@ -5321,8 +5392,8 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 					, false // velocity sense offset
 					, () => {
 						// pan
-						//upThis.#cc[chOff + ccToPos[10]] = e || 128;
-						upThis.setChCc(part, 10, e || 128);
+						//upThis.#cc[chOff + ccToPos[10]] = e || allocated.randomPan;
+						upThis.setChCc(part, 10, e || allocated.randomPan);
 					}, false // note upperbound
 					, false // note lowerbound
 					, () => {
@@ -6190,7 +6261,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 					}, () => {
 					}, () => {
 					}, () => {
-						upThis.#cc[chOff + ccToPos[10]] = e || 128;
+						upThis.#cc[chOff + ccToPos[10]] = e || allocated.randomPan;
 					}, () => {
 					}, () => {
 					}, () => {
@@ -6394,7 +6465,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 							};
 							case 14: {
 								// Pan
-								upThis.#cc[chOff + ccToPos[10]] = e || 128;
+								upThis.#cc[chOff + ccToPos[10]] = e || allocated.randomPan;
 								break;
 							};
 							case 19: {
@@ -7622,7 +7693,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 							// fine
 						}, false, false, false, false, false, () => {
 							//console.debug(`${dPref}CH${part + 1} pan: ${e}`);
-							upThis.setChCc(part, 10, e || 128);
+							upThis.setChCc(part, 10, e || allocated.randomPan);
 						}][pi] || (() => {}))();
 					} else if (pi < 36) {
 						([() => {
@@ -7692,7 +7763,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 				let ri = i + offset;
 				([() => {
 					// performance receive channel
-					upThis.modelEx.cs1x.perfCh = e;
+					upThis.modelEx.cs2x.perfCh = e;
 					upThis.pushChPrimitives(e);
 					console.debug(`Yamaha CS1x performance on CH${e + 1}.`);
 				}, false, false, false, () => {
@@ -7707,8 +7778,8 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 							break;
 						};
 						case 3: {
-							upThis.switchMode("cs1x", 2);
-							upThis.setPortModeId(upThis.getTrackPort(track), 1, modeMap.cs1x);
+							upThis.switchMode("cs2x", 2);
+							upThis.setPortModeId(upThis.getTrackPort(track), 1, modeMap.cs2x);
 							console.debug(`Yamaha CS1x set to performance mode.`);
 							break;
 						};
@@ -7724,7 +7795,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 			// Yamaha CS1x current performance common
 			let offset = msg[0];
 			let cvnWritten = false;
-			let perfCh = upThis.modelEx.cs1x.perfCh;
+			let perfCh = upThis.modelEx.cs2x.perfCh;
 			msg.subarray(1).forEach((e, i) => {
 				let ri = i + offset;
 				if (ri < 8) {
@@ -7732,7 +7803,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 					upThis.#bnCustom[perfCh] = 1;
 					upThis.setChCvnRegister(perfCh, ri, e);
 				} else if (ri < 48) {
-					// CS1x common
+					// cs2x common
 					([false, () => {
 						// not master volume
 						//upThis.#master.volume = e / 127;
@@ -7817,6 +7888,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 export {
 	TimeMuxer,
 	OctaviaDevice,
+	OctaviaFakeEPROM,
 	VoiceBank,
 	allocated,
 	dnToPos,

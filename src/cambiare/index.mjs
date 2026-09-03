@@ -37,7 +37,7 @@ const modeNames = {
 	"krs": "Korg KROSS 2",
 	"s90es": "Yamaha S90 ES",
 	"cs6x": "Yamaha CS6x",
-	"cs1x": "Yamaha CS1x",
+	"cs2x": "Yamaha CS2x",
 	"motif": "Yamaha Motif ES",
 	"pa": "Korg PA"
 };
@@ -134,7 +134,7 @@ const modeColourPool = {
 	"motif": ["9efaa0", "007f00"],
 	"cs6x": ["9efaa0", "007f00"],
 	"an1x": ["9efaa0", "007f00"],
-	"cs1x": ["9efaa0", "007f00"],
+	"cs2x": ["9efaa0", "007f00"],
 	"gm": ["a1f3ff", "006dc4"],
 	"g2": ["a1f3ff", "006dc4"],
 	"rhc": ["a1f3ff", "006dc4"],
@@ -320,6 +320,10 @@ let Cambiare = class extends RootDisplay {
 	#sectMeta = {};
 	#sectPix = {};
 	#sectExtra = {};
+	#fontSlots = {
+		"ui": "PT Sans Narrow",
+		"meta": "PT Sans Narrow"
+	};
 	eventViewMode = 0; // 0 for event count, 1 for FPS
 	useElementCount = true;
 	//#noteEvents = [];
@@ -675,6 +679,7 @@ let Cambiare = class extends RootDisplay {
 						break;
 					};
 				};
+				e.metre.font = `20px '${upThis.#fontSlots.ui}'`;
 				if (e.metre.rWidth > e.metre.canvas.width) {
 					if (e.metre.rNew) {
 						e.metre.rNew = false;
@@ -1031,6 +1036,13 @@ let Cambiare = class extends RootDisplay {
 		classOff(upThis.#canvas, [`cambiare-style-block`, `cambiare-style-comb`, `cambiare-style-piano`, `cambiare-style-line`]);
 		classOn(upThis.#canvas, [`cambiare-style-${value}`]);
 	};
+	getChAccent(part = 0) {
+		if (part >= allocated.ch) {
+			throw(new RangeError("Invalid part number"));
+		};
+		let upThis = this;
+		return upThis.#chAccent[part] ?? upThis.#accent;
+	};
 	getChMode(part = 0, disableFallback) {
 		if (part >= allocated.ch) {
 			throw(new RangeError("Invalid part number"));
@@ -1042,15 +1054,55 @@ let Cambiare = class extends RootDisplay {
 			return upThis.#chMode[part] ?? upThis.#mode;
 		};
 	};
-	getChAccent(part = 0) {
-		if (part >= allocated.ch) {
-			throw(new RangeError("Invalid part number"));
+	setBackgroundColour(colourString) {
+		if (colourString == null) {
+			this.#sectExtra.root.style.backgroundColor = "";
+			return;
+		} else if (typeof colourString !== "string") {
+			throw(new TypeError(`The colour must be a valid string.`));
 		};
-		let upThis = this;
-		return upThis.#chAccent[part] ?? upThis.#accent;
+		if (colourString.length === 0) {
+			this.#sectExtra.root.style.backgroundColor = "";
+		} else if (colourString[0] === "#") {
+			if ((0b0000001010110000 >> colourString.length) & 1) {
+				this.#sectExtra.root.style.backgroundColor = colourString;
+			} else {
+				throw(new SyntaxError(`Specified malformed hexadecimal colour.`));
+			};
+		} else {
+			throw(new TypeError(`Unsupported colour scheme.`));
+		};
 	};
 	setClockSource(clockSource) {
 		this.#clockSource = clockSource;
+	};
+	setFrameTime(frameTime = 20) {
+		let upThis = this;
+		if (upThis.#renderThread?.constructor) {
+			clearInterval(upThis.#renderThread);
+		};
+		if (frameTime < 5) {
+			frameTime = 5;
+		} else if (frameTime > 500) {
+			frameTime = 500;
+		};
+		upThis.#renderThread = setInterval(upThis.#renderer, frameTime);
+		upThis.smoothingAtk = Math.pow(0.1, frameTime / 20);
+		upThis.smoothingDcy = Math.pow(0.75, frameTime / 20);
+	};
+	setMode(mode) {
+		let upThis = this;
+		upThis.#mode = mode;
+		upThis.#accent = getPresetAccentColour(modeColourPool[mode] || ["fcdaff", "6c007f"], upThis.#scheme);
+		//classOff(upThis.#canvas, modeGlobalClasses);
+		for (let className of upThis.#canvas.classList) {
+			if (className.substring(0, 14) === "cambiare-mode-") {
+				upThis.#canvas.classList.remove(className);
+			};
+		};
+		if (mode !== "?") {
+			upThis.#canvas.classList.add(`cambiare-mode-${mode}`);
+		};
 	};
 	setPixelProfile(profileName) {
 		let upThis = this;
@@ -1069,32 +1121,19 @@ let Cambiare = class extends RootDisplay {
 			throw(new Error(`"${profileName}" is not a valid pixel correction profile`));
 		};
 	};
-	setMode(mode) {
+	setPort(port) {
 		let upThis = this;
-		upThis.#mode = mode;
-		upThis.#accent = getPresetAccentColour(modeColourPool[mode] || ["fcdaff", "6c007f"], upThis.#scheme);
-		//classOff(upThis.#canvas, modeGlobalClasses);
-		for (let className of upThis.#canvas.classList) {
-			if (className.substring(0, 14) === "cambiare-mode-") {
-				upThis.#canvas.classList.remove(className);
-			};
-		};
-		if (mode !== "?") {
-			upThis.#canvas.classList.add(`cambiare-mode-${mode}`);
-		};
+		classOff(upThis.#canvas, [`cambiare-start0`, `cambiare-start1`, `cambiare-start2`, `cambiare-start3`, `cambiare-start4`, `cambiare-start5`, `cambiare-start6`, `cambiare-start7`]);
+		classOn(upThis.#canvas, [`cambiare-start${port}`]);
+		upThis.#renderPort = port;
+		upThis.#setPortView(false);
 	};
-	setChMode(part, mode) {
+	setRange(mode) {
 		let upThis = this;
-		upThis.#chMode[part] = mode;
-		let partViewer = upThis.#sectPart[part >> 4][part & 15];
-		for (let className of partViewer.root.classList) {
-			if (className.substring(0, 10) === "part-mode-") {
-				partViewer.root.classList.remove(className);
-			};
-		};
-		if (mode !== "?") {
-			partViewer.root.classList.add(`part-mode-${mode}`);
-		};
+		classOff(upThis.#canvas, [`cambiare-port1`, `cambiare-port2`, `cambiare-port4`, `cambiare-compact`]);
+		classOn(upThis.#canvas, [`cambiare-${mode}`]);
+		upThis.#renderRange = parseInt(mode.slice(4)) || 1;
+		upThis.#setPortView(true);
 	};
 	setScheme(scheme = 0) {
 		let upThis = this;
@@ -1118,6 +1157,41 @@ let Cambiare = class extends RootDisplay {
 					upThis.#chAccent[part] = getPresetAccentColour(targetColour, upThis.#scheme);
 				};
 			};
+		};
+	};
+	setSlotFont(slot, fontFamily) {
+		const upThis = this;
+		switch (slot) {
+			case "ui": {
+				upThis.#canvas.style.setProperty(`--${slot}-font`, fontFamily || "PT Sans Narrow");
+				upThis.#fontSlots[slot] = fontFamily || "PT Sans Narrow";
+				break;
+			};
+			case "meta" : {
+				let mappedFamily = fontFamily;
+				if (mappedFamily === "Follow UI") {
+					mappedFamily = "A Random Invalid Font Name To Make It Fall Back";
+				};
+				upThis.#sectMeta.root.style.setProperty(`--${slot}-font`, mappedFamily || "PT Sans Narrow");
+				upThis.#fontSlots[slot] = mappedFamily || "PT Sans Narrow";
+				break;
+			};
+			default: {
+				throw(new Error(`Unknown font slot "${slot}".`));
+			};
+		};
+	};
+	setChMode(part, mode) {
+		let upThis = this;
+		upThis.#chMode[part] = mode;
+		let partViewer = upThis.#sectPart[part >> 4][part & 15];
+		for (let className of partViewer.root.classList) {
+			if (className.substring(0, 10) === "part-mode-") {
+				partViewer.root.classList.remove(className);
+			};
+		};
+		if (mode !== "?") {
+			partViewer.root.classList.add(`part-mode-${mode}`);
 		};
 	};
 	#setPortView(canvasUpdate) {
@@ -1149,53 +1223,6 @@ let Cambiare = class extends RootDisplay {
 				});
 			};
 		});
-	};
-	setPort(port) {
-		let upThis = this;
-		classOff(upThis.#canvas, [`cambiare-start0`, `cambiare-start1`, `cambiare-start2`, `cambiare-start3`, `cambiare-start4`, `cambiare-start5`, `cambiare-start6`, `cambiare-start7`]);
-		classOn(upThis.#canvas, [`cambiare-start${port}`]);
-		upThis.#renderPort = port;
-		upThis.#setPortView(false);
-	};
-	setRange(mode) {
-		let upThis = this;
-		classOff(upThis.#canvas, [`cambiare-port1`, `cambiare-port2`, `cambiare-port4`, `cambiare-compact`]);
-		classOn(upThis.#canvas, [`cambiare-${mode}`]);
-		upThis.#renderRange = parseInt(mode.slice(4)) || 1;
-		upThis.#setPortView(true);
-	};
-	setFrameTime(frameTime = 20) {
-		let upThis = this;
-		if (upThis.#renderThread?.constructor) {
-			clearInterval(upThis.#renderThread);
-		};
-		if (frameTime < 5) {
-			frameTime = 5;
-		} else if (frameTime > 500) {
-			frameTime = 500;
-		};
-		upThis.#renderThread = setInterval(upThis.#renderer, frameTime);
-		upThis.smoothingAtk = Math.pow(0.1, frameTime / 20);
-		upThis.smoothingDcy = Math.pow(0.75, frameTime / 20);
-	};
-	setBackgroundColour(colourString) {
-		if (colourString == null) {
-			this.#sectExtra.root.style.backgroundColor = "";
-			return;
-		} else if (typeof colourString !== "string") {
-			throw(new TypeError(`The colour must be a valid string.`));
-		};
-		if (colourString.length === 0) {
-			this.#sectExtra.root.style.backgroundColor = "";
-		} else if (colourString[0] === "#") {
-			if ((0b0000001010110000 >> colourString.length) & 1) {
-				this.#sectExtra.root.style.backgroundColor = colourString;
-			} else {
-				throw(new SyntaxError(`Specified malformed hexadecimal colour.`));
-			};
-		} else {
-			throw(new TypeError(`Unsupported colour scheme.`));
-		};
 	};
 	setWallpaperOpacity(opacity) {
 		if (typeof opacity !== "number") {
@@ -1405,7 +1432,6 @@ let Cambiare = class extends RootDisplay {
 				e.metre.canvas.width = 121;
 				e.metre.canvas.height = 25;
 				e.metre.textBaseline = "top";
-				e.metre.font = "20px 'PT Sans Narrow'";
 				e.ccVis.canvas.width = 109;
 				e.ccVis.canvas.height = 25;
 				e.ccVis.fillStyle = `#${upThis.#foreground}`;

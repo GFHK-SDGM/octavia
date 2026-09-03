@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta http-equiv="200" charset="utf-8" />
+	<title>Single Event (Dis)assembly</title>
+	<meta content="true" name="HandheldFriendly" />
+	<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport" />
+	<meta name="application-name" content="Single Event Disassembly" />
+	<meta name="author" content="Lightingale Community, Lumière Élevé" />
+	<meta name="description" content="Enter the raw bytes of a MIDI 1.0 event, then attempt parsing and disassembly." />
+	<link rel="icon" href="https://cdn.discordapp.com/emojis/1468912537201541289.webp?quality=lossless&size=128" />
+	<link rel="stylesheet" href="../css/bulma.css" />
+	<link rel="stylesheet" href="../css/fonts.css" />
+	<link rel="stylesheet" href="../css/toolsGlobal.css" />
+	<link rel="stylesheet" href="../css/cambiare_demo.css" />
+	<script defer src="../js/dasmSingle.js"></script>
+</head>
+<body>
+	<div class="container is-max-widescreen">
+		<section class="hero">
+			<div class="hero-body">
+				<p class="title">Single Event (Dis)assembly</p>
+				<p class="subtitle">Enter the raw bytes of a MIDI 1.0 event, then attempt parsing and disassembly.</p>
+			</div>
+		</section>
+		<div class="columns is-multiline is-mobile is-vcentered" x-data="{'schema':[['Raw','Raw MIDI 1.0 event binary string.'],['SMF','MIDI event binary string wrapped in SMF events.']],'delta':['Unused','Included'],'readable':[['No','Use the standard baseline MIA instruction set without any readable remapping.'],['Yes','Use the readable alternative MIA instruction set, with remapping selectively provided by Octavia Mane (midi-db).']],'finalise':[['No','Do not go through the finalisation pass.'],['Yes','Add a single-event finalisation pass after parsing.']]}">
+			<!--This section should have interactivity implemented via AlpineJS instead.-->
+			<div class="column column-option"><b>Schema</b></div>
+			<template x-for="(option, value) in schema">
+				<div class="column column-option column-button" @click="gSchemaIsWrapped(value>0)" x-text="option[0]" :title="option[1]" :active="($store.schemaIsWrapped??false)===(value>0)?'true':'false'"></div>
+			</template>
+			<div class="column column-option"><b>Delta</b></div>
+			<template x-for="(option, value) in delta">
+				<div class="column column-option column-button" @click="gHasDelta(value>0)" x-text="option" :active="($store.hasDelta??false)===(value>0)?'true':'false'"></div>
+			</template>
+			<div class="column column-option"><b>Finalise</b></div>
+			<template x-for="(option, value) in finalise">
+				<div class="column column-option column-button" @click="gFinalise(value>0)" x-text="option[0]" :title="option[1]" :active="($store.finalise??false)===(value>0)?'true':'false'"></div>
+			</template>
+			<div class="column column-option"><b>Readable</b></div>
+			<template x-for="(option, value) in readable">
+				<div class="column column-option column-button" @click="gUseReadable(value>0)" x-text="option[0]" :title="option[1]" :active="($store.useReadable??false)===(value>0)?'true':'false'"></div>
+			</template>
+			<div class="column"></div>
+		</div>
+		<div class="columns is-multiline is-mobile is-vcentered" x-data="{}">
+			<div class="column" style="min-width: 300px;">
+				<div class="control">
+					<input type="text" id="text-raw" class="input text-functional" value="F07E7F0901F7"></input>
+				</div>
+			</div>
+			<div class="column column-option">
+				<button @click="gParseRaw()" class="button is-link" title="Emit disassembled MIA and the diagnostic object. Also activated by the Enter key when focused on the text field.">Parse</button>
+			</div>
+			<div class="column column-option">
+				<button @click="gSerialiseRaw()" class="button is-success" title="Emit raw binary string from the previously parsed result.">Serialise</button>
+			</div>
+		</div>
+		<div class="columns is-multiline is-mobile is-vcentered" x-data="{}">
+			<div class="column" style="min-width: 300px;">
+				<div class="control">
+					<input type="text" id="text-mia" class="input text-functional" value='meta text "Waiting for input."l9'></input>
+				</div>
+			</div>
+			<div class="column column-option">
+				<button @click="gParseMia()" class="button is-info" title="Emit the assembled raw bytes and the diagnostic object. Also activated by the Enter key when focused on the text field.">Parse</button>
+			</div>
+			<div class="column column-option">
+				<button @click="gSerialiseMia()" class="button is-warning" title="Emit MIA instruction from the previously parsed result.">Serialise</button>
+			</div>
+		</div>
+		<div id="renderer-naked" class="text-functional text-renderer content has-radius-normal has-background-dark has-text-dark-invert px-5 py-4">Parse an event to begin.</div>
+		<footer class="footer px-5 py-4">
+			<div class="content px-5">
+				<p>This utility is mainly for developers. If you are familiar with MIA and Mane, this can also be used as a very versatile parameter editor like XG Editor, GS Advanced Editor and Korg X5/N5 editor, basically (Neo)Vim, SCORE or LilyPond for MIDI.</p>
+			</div>
+			<hr/>
+			<div class="content has-text-centered">
+				<p>Copyright 2024-2026 © Lumière Élevé, Lightingale Community</p>
+				<p>The Octavia toolchain is licensed under GNU LGPL v3.0 License. Source code available on <a href="https://codeberg.org/ltgc/octavia" target="_blank">Codeberg</a> and <a href="https://github.com/ltgcgo/octavia" target="_blank">GitHub</a>.</p>
+				<p>Learn more: <a target="_blank" href="https://github.com/ltgcgo/octavia/issues/79">MICC</a>, <a target="_blank" href="https://github.com/ltgcgo/octavia/issues/76">MIA</a>, <a target="_blank" href="https://github.com/ltgcgo/midi-db#mane-mappings">Mane</a></p>
+			</div>
+		</footer>
+	</div>
+</body>

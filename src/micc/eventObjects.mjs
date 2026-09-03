@@ -15,15 +15,19 @@ const MICCBaseElement = class MICCBaseElement {
 const NakedMIDIEvent = class NakedMIDIEvent extends MICCBaseElement {
 	delta = 0;
 	type = 0;
-	ch = 256;
-	meta;
+	ch = null;
+	meta = null;
+	/** @type {Uint8Array} */
 	data;
 	isStale = false;
-	offset;
-	parsed;
-	time;
-	port = 255;
-	track = 65535;
+	/** @type {number?} */
+	offset = null;
+	/** @type {number|string?} */
+	parsed = null;
+	/** @type {number?} */
+	time = null;
+	port = null;
+	track = null;
 	label;
 	constructor(type, delta) {
 		super("mma.midiEvent");
