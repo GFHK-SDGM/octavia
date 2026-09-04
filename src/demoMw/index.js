@@ -8,6 +8,11 @@ import {
 	fromJson,
 	getBridge
 } from "../bridge/index.old.mjs";
+import {
+	MICCInternalsSMF,
+	MIDINakedEvent
+} from "../micc/index.mjs";
+import { pruneObjects } from "../state/utils.js";
 
 let globalAudioCtx;
 let getGAC = function () {
@@ -49,8 +54,48 @@ let refreshPortIn = function () {
 	});
 };
 
-let inputConv = function (ev) {
-	midiLine.postMessage(toJson(ev.data, inPortMap[ev.target.id]));
+/** @param {MIDINakedEvent} midiEvent */
+const midiNaked2ColxiAlt = function (midiEvent) {
+	const newEvent = {
+		deltaTime: midiEvent.delta,
+		type: midiEvent.type,
+		meta: midiEvent.meta,
+		part: midiEvent.ch,
+		data: midiEvent.parsed ?? midiEvent.data,
+		track: midiEvent.track,
+		port: midiEvent.port
+	};
+	if (midiEvent.type === 240) {
+		newEvent.type = 15;
+	};
+	return newEvent;
+};
+
+const inputConv = function (ev) {
+	const oldEvent = toJson(ev.data, inPortMap[ev.target.id]);
+	/*midiLine.postMessage(oldEvent);*/
+	try {
+		for (const newEvent of pruneObjects(MICCInternalsSMF.parseRawEvents(ev.data))) {
+			newEvent.port = inPortMap[ev.target.id];
+			const fakeOldEvent = midiNaked2ColxiAlt(newEvent);
+			midiLine.postMessage(fakeOldEvent);
+			switch (newEvent.type) {
+				case 8:
+				case 9:
+				case 10:
+				case 13:
+				case 14:
+				case 248: {
+					break;
+				};
+				default: {
+					//console.debug(newEvent, `\n`, oldEvent, fakeOldEvent);
+				};
+			};
+		};
+	} catch (err) {
+		console.error(err);
+	};
 };
 let inputSel = function () {
 	activeIn = midiAccess.inputs.get(this.getAttribute("mw-port-id"));

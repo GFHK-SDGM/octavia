@@ -51,7 +51,8 @@ import {
 } from "../disp/colour.js"
 import {ChordDict} from "../chord/index.mjs";
 import {
-	NakedMIDIEvent
+	MIDINakedEvent,
+	MIDIUMPEvent,
 } from "../micc/index.mjs";
 import {
 	BinaryBufferCodecs,
@@ -521,6 +522,24 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 	#cmTimbre = new Uint8Array(allocated.cmt * 64); // C/M device timbre storage (64)
 	#subDb = {};
 	clockSource = new TimeMuxer(); // Same as in Cambiare
+	clockTicker = {
+		paused: true,
+		willPlay: false,
+		lastTick: 0,
+		lastDiff: 0,
+		stackCount: 3,
+		stackTick: 0,
+		smoothing: 0.9375,
+		tickDiff: function (time) {
+			if (++this.stackTick >= this.stackCount) {
+				this.stackTick = 0;
+				const diff = time - this.lastTick;
+				this.lastTick = time;
+				this.lastDiff = diff + (this.lastDiff - diff) * this.smoothing;
+			};
+			return this.lastDiff / this.stackCount;
+		}
+	};
 	modelEx = {
 		"xg": {
 			"map": 0, // MU Basic, MU100 Native, PSR/LE, QY100
@@ -1558,15 +1577,36 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		},
 		248: function (det) {
 			// MIDI clock
+			const timeNow = this.clockSource.now();
+			if (this.clockTicker.paused) {
+				if (this.clockTicker.willPlay) {
+					this.clockTicker.paused = false;
+				};
+			} else {
+				const timeDiff = this.clockTicker.tickDiff(timeNow);
+				//console.debug(timeNow - this.clockTicker.lastTick);
+				//this.#noteLength = timeDiff;
+				this.dispatchEvent("tempo", Math.round(10000 / timeDiff) * 0.25);
+			};
+			//this.clockTicker.lastTick = timeNow;
+			//console.debug("Tick!");
 		},
 		250: function (det) {
 			// MIDI start
+			this.clockTicker.willPlay = true;
+			console.debug("Start!");
 		},
 		251: function (det) {
 			// MIDI continue
+			this.clockTicker.willPlay = true;
+			console.debug("Continue!");
 		},
 		252: function (det) {
 			// MIDI stop
+			this.clockTicker.willPlay = false;
+			this.clockTicker.paused = true;
+			//this.#noteLength = 500;
+			console.debug("Stop!");
 		},
 		254: function (det) {
 			// Active sense
@@ -1588,7 +1628,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 		}
 	};
 	// Channel message runners
-	/** @type {Map<number, (NakedMIDIEvent, number) => {}>} */
+	/** @type {Map<number, (MIDINakedEvent, number) => {}>} */
 	#chEventRun = new Map();
 	// SysEx manufacturer table
 	#seMan = {
@@ -2992,7 +3032,7 @@ let OctaviaDevice = class OctaviaDevice extends CustomEventSource {
 			this.#metaTexts.splice(100, this.#metaTexts.length - 99);
 		};
 	};
-	/** @param {NakedMIDIEvent} ingressEvent */
+	/** @param {MIDINakedEvent|MIDIUMPEvent} ingressEvent */
 	runEvent(ingressEvent) {
 		if (ingressEvent === undefined || ingressEvent === null) {
 			console.warn(new Error(`Invalid parsed event data provided.`));
