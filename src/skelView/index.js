@@ -33,11 +33,13 @@ const fileTypes = {
 	"xws": "xws",
 	"aif": "iff",
 	"aiff": "iff",
+	"bun": "riff",
 	"dls": "riff",
 	"rmi": "riff",
 	"sf2": "riff",
 	"wav": "riff",
 	"webp": "riff",
+	"wrk": "wrk",
 	"rseam": "rseam",
 	"vseam": "vseam"
 };
@@ -122,6 +124,14 @@ let showResult = async (stream, props = {}) => {
 				let rawParser = new Seamstress();
 				rawParser.headerSize = 0;
 				rawParser.type = Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32;
+				rawParser.debugMode = true;
+				readStream = rawParser.readChunks(stream);
+				break;
+			};
+			case "wrk": {
+				let rawParser = new Seamstress();
+				rawParser.headerSize = 7;
+				rawParser.type = Seamstress.TYPE_VLV | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32;
 				rawParser.debugMode = true;
 				readStream = rawParser.readChunks(stream);
 				break;

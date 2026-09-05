@@ -78,6 +78,8 @@ declare class MICCConstants {
 	/** File type: SMF type 2 - sequential tracks. */
 	static FILE_SMF_SEQUENTIAL: number;
 	/** File type: XGworks project. */
+	static FILE_SEQ_CAKEWALK: number;
+	/** File type: XGworks project. */
 	static FILE_SEQ_XGWORKS: number;
 	/** File type: FastTracker II (XM). Support postponed until needed. */
 	static FILE_TRK_FAST2: number;
@@ -86,13 +88,22 @@ declare class MICCConstants {
 	/** File type: Impulse Tracker (IT). */
 	static FILE_TRK_IMPULSE: number;
 }
-/** Base type that can populate `MICCTrack`. */
+/** Base type for some MICC classes.
+*
+* The group specifier is `ltgc.micc.unknown`. */
 export class MICCBaseElement {
-	/** The assigned group specifier. For standard MIDI events, this is always set to `mma.midiEvent`. */
+	/** The assigned group specifier. */
 	group: string;
+	constructor(group: string);
 }
-/** Representation of a MIDI event. The group specifier is `micc.baseEvent`. */
-export class MIDIBaseEvent extends MICCBaseElement {
+/** Base type for subtypes capable of populating tracks.
+*
+* The group specifier is `ltgc.micc.trackChild`. */
+export class MICCTrackElement extends MICCBaseElement {}
+/** Representation of a MIDI event.
+*
+* The group specifier is `ltgc.micc.baseEvent`. */
+export class MIDIBaseEvent extends MICCTrackElement {
 	/** Delta time. The time difference of the current event and the previous event. Defaults to `0`. */
 	delta: number;
 	/** MIDI event type. Type `8` to `14`, and `240` to `255` are all available. `0` means "unset". */
@@ -111,8 +122,11 @@ export class MIDIBaseEvent extends MICCBaseElement {
 	port?: number;
 	/** Populated if the parsed value has additional data. If the parsed value is a string, this property can denote the text encoding used. Unused by assemblers and serializers. */
 	label?: any;
+	constructor(group?: string);
 }
-/** Representation of a MIDI 1.0 event and an SMF event. The group specifier is `mma.midiEvent`. */
+/** Representation of a MIDI 1.0 event and an SMF event.
+*
+* The group specifier is `mma.midiEvent`. */
 export class MIDINakedEvent extends MIDIBaseEvent {
 	/** The meta event type. Only applicable to `0xff` (meta) events. Defaults to `null`. */
 	meta?: number;
@@ -121,7 +135,9 @@ export class MIDINakedEvent extends MIDIBaseEvent {
 	/** The track number for the event, usually set by the event funnel. Defaults to `null`. Unused by assemblers and serializers. */
 	track?: number;
 }
-/** Representation of a MIDI 2.0 event. The group specifier is `mma.midiUmp`. */
+/** Representation of a MIDI 2.0 event.
+*
+* The group specifier is `mma.midiUmp`. */
 export class MIDIUMPEvent extends MIDIBaseEvent {
 }
 /** An intermediate object consumed by Octavia's parser and serialiser. */
@@ -181,8 +197,10 @@ export class MICCInternalsSMF {
 	/** Regulates the incoming SMF stream. Set as `Seamstress.regulateStream()`. */
 	static streamRegulator(offset: number, subchunk: SeamstressChunk): number;
 }
-/** A pointer to the actual clip tracks. The group specifier is `micc.pointer`. */
-export class MICCPointer extends MICCBaseElement {
+/** A pointer to the actual clip tracks.
+*
+* The group specifier is `ltgc.micc.pointer`. */
+export class MICCPointer extends MICCTrackElement {
 	/** Type of the current pointer. Largely follows XGworks. */
 	type: number;
 	/** Starting MIDI tick of the referred block. */
@@ -198,28 +216,44 @@ export class MICCPointer extends MICCBaseElement {
 	/** Direct object reference to the normal block, supplied by a finaliser. */
 	parsed?: MICCTrack;
 }
-/** A track containing events. */
-export class MICCTrack {
+/** A track containing events.
+*
+* The group identifier is `mma.smfTrack`. */
+export class MICCTrack extends MICCTrackElement {
 	/** Track type. For SMF and XWS files, this is usually the FourCC type. */
 	type: string;
 	/** Vendor specifier of the track type. */
 	vendor: string;
 	/** Data carried by the chunk, usually a list of events. */
-	data: MICCBaseElement[];
+	data: MICCTrackElement[];
 }
-/** The base class for oscillators and instruments. */
-declare class MICCBaseVoice {
+/** The base class for oscillators and instruments.
+*
+* The group specifier is `ltgc.micc.voice`. */
+declare class MICCBaseVoice extends MICCBaseElement {
 	/** The group type. `0` for single oscillators, `1` for grouped oscillators, `2` for instruments. */
-	group: number;
+	voiceGroup: number;
 }
-/** A defined oscillator. Represents a single oscillator (PCM samples, FM parameters, VL parameters, AN parameters...). */
+/** A defined oscillator. Represents a single oscillator (PCM samples, FM parameters, VL parameters, AN parameters...).
+*
+* The group specifier is `ltgc.micc.voice.single`. */
 export class MICCOscillator extends MICCBaseVoice {}
-/** A defined multi-oscillator. Represents a set of oscillators, commonly seen in KORG AI² synths in the form of multi-samples. Will always be referred to by an instrument, and direct usage in tracks will error out. */
+/** A defined multi-oscillator. Represents a set of oscillators, commonly seen in KORG AI² synths in the form of multi-samples. Will always be referred to by an instrument, and direct usage in tracks will error out.
+*
+* The group specifier is `ltgc.micc.voice.group`. */
 export class MICCOscillatorGroup extends MICCBaseVoice {}
-/** A defined instrument. */
+/** A defined instrument.
+*
+* The group specifier is `ltgc.micc.voice.instrument`. */
 export class MICCInstrument extends MICCBaseVoice {}
-/** The contained metadata of the current file. */
-export class MICCSequenceMetadata {
+/** Base type for metadata.
+*
+* The group specifier is `ltgc.micc.meta`. */
+export class MICCBaseMetadata extends MICCBaseElement {}
+/** The contained metadata of the current file.
+*
+* The group specifier is `ltgc.micc.meta.midi`. */
+export class MICCSequenceMetadata extends MICCBaseMetadata {
 	/** The full format specifier of the current file. */
 	format: string;
 	/** MIDI time division. `480` is the most common.
@@ -243,10 +277,10 @@ export class MICCSequenceMetadata {
 export class MICCEditRecord {}
 /** (WIP) A single MIDI macro. */
 export class MICCMacroMIDI {}
-/**
-* The contained additional metadata of the current file, only makes sense for trackers. Aims at 100% compatibility with [Impulse Tracker](https://breezewiki.com/fileformats/wiki/Impulse_tracker).
-*/
-export class MICCTrackerMetadata {
+/** The contained additional metadata of the current file, only makes sense for trackers. Aims at 100% compatibility with [Impulse Tracker](https://breezewiki.com/fileformats/wiki/Impulse_tracker).
+*
+* The group specifier is `ltgc.micc.meta.tracker`. */
+export class MICCTrackerMetadata extends MICCBaseMetadata {
 	/** If the file is a tracker. */
 	isTracker: boolean;
 	/** If true, G effect will be linked with E and F. Defaults to `false` for MIDI compatibility, while tracker files will always cause this field to be set accordingly.

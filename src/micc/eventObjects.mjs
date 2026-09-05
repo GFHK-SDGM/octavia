@@ -2,7 +2,7 @@
 // Licensed under GNU LGPL v3.0 license.
 
 const MICCBaseElement = class MICCBaseElement {
-	group = "micc.unknown";
+	group = "ltgc.micc.unknown";
 	constructor(group) {
 		if (group?.length > 0) {
 			this.group = group;
@@ -28,7 +28,7 @@ const MIDIBaseEvent = class MIDIBaseEvent extends MICCBaseElement {
 	port = null;
 	label;
 	constructor(group) {
-		super(group);
+		super(group ?? "ltgc.micc.baseEvent");
 	};
 };
 const MIDINakedEvent = class MIDINakedEvent extends MIDIBaseEvent {
