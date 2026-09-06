@@ -64,12 +64,16 @@ cakewalkTypesMapping.set(0x12, "lyrics");
 cakewalkTypesMapping.set(0x15, "markers");
 cakewalkTypesMapping.set(0x16, "textEvents");
 cakewalkTypesMapping.set(0x17, "metreKeyMap");
-cakewalkTypesMapping.set(0x1a, "projectMetadata");
+cakewalkTypesMapping.set(0x1a, "projectMetadataEntry");
 cakewalkTypesMapping.set(0x24, "trackPrefix");
 cakewalkTypesMapping.set(0x2c, "sysExBulk");
 cakewalkTypesMapping.set(0x2d, "trackEvents");
 cakewalkTypesMapping.set(0x31, "prefixEvents");
+cakewalkTypesMapping.set(0x32, "unknownMultiParam1");
+cakewalkTypesMapping.set(0x46, "unknownTrackSettings2");
 cakewalkTypesMapping.set(0x4a, "savedSoftwareVersion");
+cakewalkTypesMapping.set(0x5c, "unknownTrackSettings1");
+cakewalkTypesMapping.set(0x6d, "audioMixerSettings");
 
 let summarizeSeamstressChunk = (sChunk) => {
 	return `#${sChunk.id} (${sChunk.type}, #${sChunk.chunkId}): ${sChunk.offset}/${sChunk.size}, ${sChunk.data.length} B.`;
