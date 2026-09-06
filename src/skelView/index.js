@@ -49,6 +49,28 @@ for (let extension in fileTypes) {
 };
 //console.debug(fileProps);
 
+/** @type {Map<number, string>} */
+const cakewalkTypesMapping = new Map();
+// https://kb.ltgc.cc/octavia/impl/format/wrk.html
+cakewalkTypesMapping.set(0x03, "masterSettings");
+cakewalkTypesMapping.set(0x08, "comments");
+cakewalkTypesMapping.set(0x0a, "timing");
+cakewalkTypesMapping.set(0x0b, "smpte");
+cakewalkTypesMapping.set(0x0d, "trackLoop");
+cakewalkTypesMapping.set(0x0e, "trackPatch");
+cakewalkTypesMapping.set(0x0f, "tempoMap");
+cakewalkTypesMapping.set(0x10, "thruSettings");
+cakewalkTypesMapping.set(0x12, "lyrics");
+cakewalkTypesMapping.set(0x15, "markers");
+cakewalkTypesMapping.set(0x16, "textEvents");
+cakewalkTypesMapping.set(0x17, "metreKeyMap");
+cakewalkTypesMapping.set(0x1a, "projectMetadata");
+cakewalkTypesMapping.set(0x24, "trackPrefix");
+cakewalkTypesMapping.set(0x2c, "sysExBulk");
+cakewalkTypesMapping.set(0x2d, "trackEvents");
+cakewalkTypesMapping.set(0x31, "prefixEvents");
+cakewalkTypesMapping.set(0x4a, "savedSoftwareVersion");
+
 let summarizeSeamstressChunk = (sChunk) => {
 	return `#${sChunk.id} (${sChunk.type}, #${sChunk.chunkId}): ${sChunk.offset}/${sChunk.size}, ${sChunk.data.length} B.`;
 };
@@ -75,7 +97,7 @@ let showResult = async (stream, props = {}) => {
 				rawParser.headerSize = 0;
 				rawParser.regulateStream = MICCInternalsSMF.streamRegulator;
 				rawParser.debugMode = !!self.debugMode;
-				let splitStream = stream.tee();
+				const splitStream = stream.tee();
 				(async () => {
 					for await (let chunk of rawParser.readRegulated(splitStream[1])) {
 						rawParser.debugMode && console.debug(summarizeSeamstressChunk(chunk));
@@ -105,7 +127,7 @@ let showResult = async (stream, props = {}) => {
 				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32 | Seamstress.PAD_EVEN);
 				rawParser.headerSize = 12;
 				//rawParser.debugMode = true;
-				let splitStream = stream.tee();
+				const splitStream = stream.tee();
 				(async () => {
 					for await (let chunk of rawParser.readChunks(splitStream[1])) {
 						console.debug(summarizeSeamstressChunk(chunk));
@@ -127,8 +149,19 @@ let showResult = async (stream, props = {}) => {
 			case "wrk": {
 				const rawParser = new Seamstress(Seamstress.TYPE_UI8 | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32);
 				rawParser.headerSize = 11;
-				rawParser.debugMode = true;
-				readStream = rawParser.readChunks(stream);
+				//rawParser.debugMode = true;
+				const splitStream = stream.tee();
+				(async () => {
+					for (const type of await rawParser.getMapFromStream(splitStream[1])) {
+						const mappedResult = cakewalkTypesMapping.get(type[0]);
+						if (mappedResult) {
+							console.info(`Cakewalk type 0x${type[0].toString(16).padStart(2, "0")}: 12tone.cakewalk.${mappedResult}`);
+						} else {
+							console.warn(`Cakewalk type 0x${type[0].toString(16).padStart(2, "0")}: unknown`);
+						};
+					};
+				})();
+				readStream = rawParser.readChunks(splitStream[0]);
 				break;
 			};
 			default: {
