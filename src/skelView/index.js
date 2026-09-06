@@ -95,14 +95,14 @@ let showResult = async (stream, props = {}) => {
 				break;
 			};
 			case "iff": {
-				const rawParser = new Seamstress(rawParser.TYPE_4CC | rawParser.ENDIAN_B | rawParser.LENGTH_U32 | rawParser.MASK_PADDED);
+				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32 | Seamstress.PAD_EVEN);
 				rawParser.headerSize = 12;
 				//rawParser.debugMode = true;
 				readStream = rawParser.readChunks(stream);
 				break;
 			};
 			case "riff": {
-				const rawParser = new Seamstress(rawParser.TYPE_4CC | rawParser.ENDIAN_L | rawParser.LENGTH_U32 | rawParser.MASK_PADDED);
+				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32 | Seamstress.PAD_EVEN);
 				rawParser.headerSize = 12;
 				//rawParser.debugMode = true;
 				let splitStream = stream.tee();
@@ -125,8 +125,8 @@ let showResult = async (stream, props = {}) => {
 				break;
 			};
 			case "wrk": {
-				const rawParser = new Seamstress(Seamstress.TYPE_VLV | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32);
-				rawParser.headerSize = 7;
+				const rawParser = new Seamstress(Seamstress.TYPE_UI8 | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32);
+				rawParser.headerSize = 11;
 				rawParser.debugMode = true;
 				readStream = rawParser.readChunks(stream);
 				break;
@@ -137,13 +137,18 @@ let showResult = async (stream, props = {}) => {
 		};
 		resultDisplay.append(`\nType          No.     Offset      Size`);
 	} catch (err) {
+		console.error(err);
 		resultDisplay.append(`\nUncaught ${err.name}: ${err.message ?? "No error message was provided."}\n${err.stack}`);
 	};
 	try {
 		for await (let chunk of readStream) {
 			let showKey = chunk.type;
 			if (typeof chunk.type === "number") {
-				showKey = `0x${chunk.type.toString(16)}`;
+				if (chunk.type >= 0 && chunk.type < 255) {
+					showKey = `0x${chunk.type.toString(16).padStart(2, "0")} (${chunk.type})`;
+				} else {
+					showKey = `0x${chunk.type.toString(16).padStart(8, "0")}`;
+				};
 			};
 			showKey = showKey.padEnd(10, " ");
 			if (chunk.chunkId === 0) {
