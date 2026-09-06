@@ -71,9 +71,8 @@ let showResult = async (stream, props = {}) => {
 	try {
 		switch (props.targetMode) {
 			case "smf": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32);
 				rawParser.headerSize = 0;
-				rawParser.type = Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32;
 				rawParser.regulateStream = MICCInternalsSMF.streamRegulator;
 				rawParser.debugMode = !!self.debugMode;
 				let splitStream = stream.tee();
@@ -96,17 +95,15 @@ let showResult = async (stream, props = {}) => {
 				break;
 			};
 			case "iff": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(rawParser.TYPE_4CC | rawParser.ENDIAN_B | rawParser.LENGTH_U32 | rawParser.MASK_PADDED);
 				rawParser.headerSize = 12;
-				rawParser.type = rawParser.TYPE_4CC | rawParser.ENDIAN_B | rawParser.LENGTH_U32 | rawParser.MASK_PADDED;
 				//rawParser.debugMode = true;
 				readStream = rawParser.readChunks(stream);
 				break;
 			};
 			case "riff": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(rawParser.TYPE_4CC | rawParser.ENDIAN_L | rawParser.LENGTH_U32 | rawParser.MASK_PADDED);
 				rawParser.headerSize = 12;
-				rawParser.type = rawParser.TYPE_4CC | rawParser.ENDIAN_L | rawParser.LENGTH_U32 | rawParser.MASK_PADDED;
 				//rawParser.debugMode = true;
 				let splitStream = stream.tee();
 				(async () => {
@@ -121,17 +118,15 @@ let showResult = async (stream, props = {}) => {
 				break;
 			};
 			case "xws": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32);
 				rawParser.headerSize = 0;
-				rawParser.type = Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32;
-				rawParser.debugMode = true;
+				//rawParser.debugMode = true;
 				readStream = rawParser.readChunks(stream);
 				break;
 			};
 			case "wrk": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(Seamstress.TYPE_VLV | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32);
 				rawParser.headerSize = 7;
-				rawParser.type = Seamstress.TYPE_VLV | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32;
 				rawParser.debugMode = true;
 				readStream = rawParser.readChunks(stream);
 				break;

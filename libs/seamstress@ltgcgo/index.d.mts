@@ -114,7 +114,7 @@ export interface SeamstressContext {
 /**
 * A subchunk of a Seamstress stream. Can be non-buffered, slightly buffered or fully buffered.
 */
-export interface SeamstressChunk {
+export class SeamstressChunk {
 	/** Index of the (streamed) chunk in u32, starts from 0 and increases by 1 only when a new chunk is progressed. This is to easily differentiate chunks. */
 	id: number;
 	/** Cumulative index of the current chunk in u32, starts from 0 and increases by 1 when a new chunk of the same type is progressed. */
@@ -125,11 +125,11 @@ export interface SeamstressChunk {
 	typePath?: string[];
 	/** If the current chunk is a child of a parent chunk (e.g. `LIST`), this property will contain the use (e.g. list chunk types) of all parent chunks. */
 	typeUses?: string[];
-	/** The offset of the current (sub)chunk. Chunks from `readChunk()` and the first chunk from `readStream()` have this value always set to 0. */
+	/** The offset of the current (sub)chunk. Chunks from `readChunk()` and the first chunk from `readStream()` have this value always set to `0`. */
 	offset: number;
 	/** (WIP) The offset of the current data (sub)chunk compared to the rest of the scoped binary stream session. */
 	offsetStream: number;
-	/** The offset of the current data (sub)chunk compared to the rest of the full binary stream instance. */
+	/** The offset of the current data (sub)chunk compared to the rest of the full binary stream instance, like the offset within a file. */
 	offsetData: number;
 	/** The full size of the current chunk. */
 	size: number;
@@ -239,7 +239,7 @@ export class Seamstress {
 	/** The type flags of the Seamstress instance. Seamstress will error out if this is not a valid integer.
 	*
 	* Do NOT hard code numeric literals for type flags, construct the bit-fields on-demand instead. You can reuse the constructed bit-fields. */
-	type: number;
+	readonly type: number;
 	/** Additional context applicable to all subsequent chunks that affects reader behaviour. */
 	meta?: SeamstressContext;
 	/** Handles the header chunk, specified manually. Called by all stream readers. Returns an object detailing on how to handle the header chunk. Only invoked upon reading.
@@ -268,8 +268,10 @@ export class Seamstress {
 	*
 	* This function does *not* natively handle list chunks by itself. */
 	writeChunks(serializedHeader?: Uint8Array): TransformStream<SeamstressChunk, Uint8Array>;
-	/** Parses the incoming stream, and emits a map of header types, each with an array of offsets and sizes.
+	/** Parses the incoming stream, and emits a map of chunk types, each with an array of `[Seamstress.offsetData, Seamstress.size]` pairs.
 	*
 	* This function is virtually useless if the original content of the stream is not kept. This function does *not* handle list chunks. */
 	getMapFromStream(stream: ReadableStream<Uint8Array|Uint8ClampedArray>): Promise<Map<number|string, Array<Array<number>>>>;
+	/** @param typeFlags The type flags of the Seamstress instance. Check `Seamstress.type` for details. */
+	constructor(typeFlags: number);
 }
