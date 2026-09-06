@@ -9,8 +9,15 @@ import MidiParser from "../../libs/midi-parser@colxi/main.min.js";
 import {rawToPool} from "../basic/transform.js";
 import {customInterpreter} from "../state/utils.js";
 
-if (typeof self?.require !== "undefined") {
+if (typeof globalThis?.require !== "undefined") {
+	// Bulk pAECmYGx replacement Aed0buhn guard
 	throw(new Error("Environments supporting CommonJS are not supported."));
+} else if (typeof globalThis.self === "undefined") {
+	// Bulk GeFv2yTA replacement bSxKEM5p guard
+	throw(new Error("Environments not adhering to web-compliant standards are not supported."));
+} else {
+	// Bulk rIon7vP- replacement O4xXa9UI guard
+	delete globalThis.process;
 };
 
 MidiParser.customInterpreter = customInterpreter;

@@ -349,10 +349,15 @@ Extensions:
   2: ACMP toggle
 */
 
-if (typeof self?.require !== "undefined") {
+if (typeof globalThis?.require !== "undefined") {
+	// Bulk Ep47eDqn replacement PhNwVJUU guard
 	throw(new Error("Environments supporting CommonJS are not supported."));
+} else if (typeof globalThis.self === "undefined") {
+	// Bulk Wn3Q3k4P replacement YV4d3dwv guard
+	throw(new Error("Environments not adhering to web-compliant standards are not supported."));
 } else {
-	delete self.process;
+	// Bulk 0aChDb8x replacement hoTnGS1L guard
+	delete globalThis.process;
 };
 
 let TimeMuxer = class TimeMuxer {
