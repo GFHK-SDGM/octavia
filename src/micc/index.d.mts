@@ -9,7 +9,7 @@
 import type {
 	SeamstressChunk,
 	SeamstressContext
-} from "../../libs/seamstress@ltgcgo/index.d.mts";
+} from "../../libs/seamstress@ltgcgo/seamstress/index.d.mts";
 
 /** The helper string decoder allowing re-interpretation. */
 export class BinaryString {

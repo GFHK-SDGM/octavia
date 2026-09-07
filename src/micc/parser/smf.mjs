@@ -3,7 +3,7 @@
 import {
 	IntegerHandler,
 	SeamstressChunk
-} from "../../../libs/seamstress@ltgcgo/index.mjs";
+} from "../../../libs/seamstress@ltgcgo/seamstress/index.mjs";
 import {
 	bufferCarveOut
 } from "../../state/utils/bufferIo.mjs";
