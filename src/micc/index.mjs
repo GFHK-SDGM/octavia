@@ -7,9 +7,6 @@ import {
 } from "./eventObjects.mjs";
 import MICCInternalsSMF from "./parser/smf.mjs";
 import MICCInternalsMIA from "./parser/mia.mjs";
-import {
-	ColxiMIDIParser
-} from "./parser/colxi.mjs";
 
 if (typeof globalThis?.require !== "undefined") {
 	// Bulk hlLqW3M8 replacement EJz8Q9xI guard
@@ -26,6 +23,5 @@ export {
 	MICCBaseElement,
 	MIDINakedEvent,
 	MICCInternalsSMF,
-	MICCInternalsMIA,
-	ColxiMIDIParser
+	MICCInternalsMIA
 };

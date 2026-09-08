@@ -24,7 +24,7 @@ const MIDIBaseEvent = class MIDIBaseEvent extends MICCBaseElement {
 	/** @type {number|string?} */
 	parsed = null;
 	/** @type {number?} */
-	time = null;
+	tick = null;
 	port = null;
 	label;
 	constructor(group) {

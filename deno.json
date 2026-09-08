@@ -1,6 +1,6 @@
 {
 	"name": "@ltgc/octavia",
-	"version": "0.0.11-pre.1+b.5",
+	"version": "0.0.11",
 	"license": "LGPL-3.0-only",
 	"imports": {
 		"@ltgc/rochelle": "jsr:@ltgcgo/rochelle@^0.2.9",
@@ -23,6 +23,7 @@
 			"dist/README.md",
 			"dist/*.mjs",
 			"dist/*.mts",
+			"libs/libs",
 			"libs/**/*.d.mts",
 			"README.md"
 		]
