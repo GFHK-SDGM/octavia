@@ -1,6 +1,6 @@
 {
 	"name": "@ltgc/octavia",
-	"version": "0.0.11-pre.1+b.5",
+	"version": "0.0.13",
 	"license": "LGPL-3.0-only",
 	"imports": {
 		"@ltgc/rochelle": "jsr:@ltgcgo/rochelle@^0.2.9",
@@ -13,6 +13,7 @@
 		"./chord": "./dist/chord.d.mts",
 		"./disp": "./dist/disp.d.mts",
 		"./micc": "./dist/micc.d.mts",
+		"./miccCompat": "./dist/miccCompat.d.mts",
 		"./resampler": "./dist/resampler.d.mts",
 		"./state": "./dist/state.d.mts",
 		"./xp_basic": "./dist/xp_basic.d.mts",
@@ -23,6 +24,7 @@
 			"dist/README.md",
 			"dist/*.mjs",
 			"dist/*.mts",
+			"libs/libs",
 			"libs/**/*.d.mts",
 			"README.md"
 		]

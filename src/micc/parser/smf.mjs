@@ -3,7 +3,7 @@
 import {
 	IntegerHandler,
 	SeamstressChunk
-} from "../../../libs/seamstress@ltgcgo/index.mjs";
+} from "../../../libs/seamstress@ltgcgo/seamstress/index.mjs";
 import {
 	bufferCarveOut
 } from "../../state/utils/bufferIo.mjs";
@@ -175,6 +175,21 @@ export default class MICCInternalsSMF {
 				if (options.isSmfWrapped) {
 					throw(new Error(`Realtime event ${eventType.toString(16).toUpperCase()} can only exist raw.`));
 				};
+				break;
+			};
+			case 241:
+			case 243: {
+				if (options.isSmfWrapped) {
+					throw(new Error(`Common event ${eventType.toString(16).toUpperCase()} can only exist raw.`));
+				};
+				dataEndPointer += 1;
+				break;
+			};
+			case 242: {
+				if (options.isSmfWrapped) {
+					throw(new Error(`Song position pointers can only exist raw.`));
+				};
+				dataEndPointer += 2;
 				break;
 			};
 			default: {

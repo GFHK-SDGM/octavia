@@ -136,7 +136,7 @@ let IntegerHandler = class IntegerHandler {
 	};
 	static readVLV(buffer, offset = 0) {
 		// VLV-8 are all big-endian.
-		let upThis = this;
+		const upThis = this;
 		upThis.#ensureU8(buffer);
 		let breakCrit = Math.min(buffer.length - offset, 4),
 		breakTest = breakCrit - 1,
@@ -170,7 +170,7 @@ let IntegerHandler = class IntegerHandler {
 	};
 	static readVLVBigInt(buffer, offset = 0) {
 		// VLV-8 are all big-endian.
-		let upThis = this;
+		const upThis = this;
 		upThis.#ensureU8(buffer);
 		let breakCrit = Math.min(buffer.length - offset, 16),
 		breakTest = breakCrit - 1,
@@ -599,30 +599,37 @@ const seamstressListUseHandlerFourCC = function (buffer) {
 	};
 };
 
-let Seamstress = class Seamstress {
-	static MASK_ENDIAN = 1;
-	static MASK_LENGTH = 2;
-	static MASK_PADDED = 4;
-	static MASK_TYPE = 8;
-	static ENDIAN_B = 0;
-	static ENDIAN_L = 1;
-	static LENGTH_VLV = 0;
-	static LENGTH_U32 = 2;
-	static TYPE_VLV = 0;
-	static TYPE_4CC = 8;
-	MASK_ENDIAN = 1;
-	MASK_LENGTH = 2;
-	MASK_PADDED = 4;
-	MASK_TYPE = 8;
-	ENDIAN_B = 0;
-	ENDIAN_L = 1;
-	LENGTH_VLV = 0;
-	LENGTH_U32 = 2;
-	TYPE_VLV = 0;
-	TYPE_4CC = 8;
+const Seamstress = class Seamstress {
+	static MASK_ENDIAN = 0b00000000_00000001;
+	static MASK_LENGTH = 0b00000000_00000010;
+	static MASK_PADDED = 0b00000000_00001100;
+	static MASK_TYPE = 0b00000000_00110000;
+	static ENDIAN_B = 0b00000000_00000000;
+	static ENDIAN_L = 0b00000000_00000001;
+	static LENGTH_VLV = 0b00000000_00000000;
+	static LENGTH_U32 = 0b00000000_00000010;
+	static PAD_NONE = 0b00000000_00000000;
+	static PAD_EVEN = 0b00000000_00000100;
+	static TYPE_VLV = 0b00000000_00000000;
+	static TYPE_UI8 = 0b00000000_00010000;
+	static TYPE_4CC = 0b00000000_00100000;
+	MASK_ENDIAN = Seamstress.MASK_ENDIAN;
+	MASK_LENGTH = Seamstress.MASK_LENGTH;
+	MASK_PADDED = Seamstress.MASK_PADDED;
+	MASK_TYPE = Seamstress.MASK_TYPE;
+	ENDIAN_B = Seamstress.ENDIAN_B;
+	ENDIAN_L = Seamstress.ENDIAN_L;
+	LENGTH_VLV = Seamstress.LENGTH_VLV;
+	LENGTH_U32 = Seamstress.LENGTH_U32;
+	PAD_NONE = Seamstress.PAD_NONE;
+	PAD_EVEN = Seamstress.PAD_EVEN;
+	TYPE_VLV = Seamstress.TYPE_VLV;
+	TYPE_UI8 = Seamstress.TYPE_UI8;
+	TYPE_4CC = Seamstress.TYPE_4CC;
 	debugMode = false;
 	#l9Dec = new TextDecoder("l9");
 	#listChunks = new Set();
+	#type = 0;
 	#increaseInMap(map, key) {
 		if (map.has(key)) {
 			let value = map.get(key);
@@ -655,7 +662,7 @@ let Seamstress = class Seamstress {
 		return summedBuffer;
 	};
 	async #enqueueCascade(data, defaultHost, preferredHost) {
-		let upThis = this;
+		const upThis = this;
 		let dPrefix = `[Seamstress ENQU] Stream depth ${data.depth}, chunk ${data.id} (${data.chunkId}), type "${data.type}", size ${data.data.length} B (0x${(data.offsetData).toString(16)}, ${data.offsetStream}, ${data.offset})`;
 		let isChild = preferredHost?.closed === false;
 		upThis.debugMode && console.debug(`${dPrefix}: Sending to ${isChild ? "child" : "parent"} scheduled.`);
@@ -695,7 +702,12 @@ let Seamstress = class Seamstress {
 		};
 	};
 	headerSize = 0;
-	type = 0; // 0 for non-reversible SEAM stream, 10 for SMF
+	get type() {
+		return this.#type;
+	};
+	/*set type(value) {
+		throw(new Error(`Attempted to write to a read-only property.`));
+	};*/
 	meta = {
 		seamstressDepth: 0,
 		seamstressOffset: 0,
@@ -716,8 +728,8 @@ let Seamstress = class Seamstress {
 	};
 	useCollection = false;
 	/** @returns {ReadableStream<SeamstressChunk>} */
-	readStream(stream) {
-		let upThis = this;
+	#readStreamInternal(stream, dropData = false) {
+		const upThis = this;
 		let skipLength = upThis.headerSize,
 		chunkStart = 0, chunkId = 0,
 		typeBuffer = new Uint8Array(4),
@@ -740,7 +752,7 @@ let Seamstress = class Seamstress {
 		childStreamHeaderSize = 0,
 		childStreamHeaderHandler;
 		if (handleCollections) {
-			switch (upThis.type & upThis.MASK_TYPE) {
+			switch (upThis.#type & upThis.MASK_TYPE) {
 				case upThis.TYPE_4CC: {
 					childStreamHeaderSize = 4;
 					childStreamHeaderHandler = seamstressListUseHandlerFourCC;
@@ -758,7 +770,7 @@ let Seamstress = class Seamstress {
 			childStreamRead = new Seamstress();
 			childStreamRead.headerSize = childStreamHeaderSize;
 			childStreamRead.headerHandler = childStreamHeaderHandler;
-			childStreamRead.type = upThis.type;
+			childStreamRead.type = upThis.#type;
 		};
 		//streamHost.debugMode = true;
 		let chunkType, chunkSize;
@@ -780,7 +792,9 @@ let Seamstress = class Seamstress {
 				if (skipLength > chunk.length) {
 					if (isHeaderRead) {
 						let subchunkData = new SeamstressChunk(seamChunkId, seamChunkMap.get(chunkType), chunkType, chunkSize - skipLength, chunkSize);
-						subchunkData.data = chunk;
+						if (!(dropData && childStreamHost?.readable != null && childStreamHost?.closed)) {
+							subchunkData.data = chunk;
+						};
 						subchunkData.offsetStream = chunkStart;
 						subchunkData.offsetData = (upThis.meta?.seamstressOffset ?? 0) + subchunkData.offsetStream;
 						subchunkData.context = seamContext;
@@ -801,7 +815,9 @@ let Seamstress = class Seamstress {
 					upThis.debugMode && console.debug(`${dPrefix} (${chunkStart}): Should commit the entire chunk and flush the buffer.`);
 					if (isHeaderRead) {
 						let subchunkData = new SeamstressChunk(seamChunkId, seamChunkMap.get(chunkType), chunkType, chunkSize - skipLength, chunkSize);
-						subchunkData.data = chunk;
+						if (!(dropData && childStreamHost?.readable != null && childStreamHost?.closed)) {
+							subchunkData.data = chunk;
+						};
 						subchunkData.offsetStream = chunkStart;
 						subchunkData.offsetData = (upThis.meta?.seamstressOffset ?? 0) + subchunkData.offsetStream;
 						subchunkData.context = seamContext;
@@ -830,7 +846,9 @@ let Seamstress = class Seamstress {
 					upThis.debugMode && console.debug(`${dPrefix} (${chunkStart}): Should flush the buffer.`);
 					if (isHeaderRead) {
 						let subchunkData = new SeamstressChunk(seamChunkId, seamChunkMap.get(chunkType), chunkType, chunkSize - skipLength, chunkSize);
-						subchunkData.data = chunk.subarray(0, skipLength);
+						if (!(dropData && childStreamHost?.readable != null && childStreamHost?.closed)) {
+							subchunkData.data = chunk.subarray(0, skipLength);
+						};
 						subchunkData.offsetStream = chunkStart;
 						subchunkData.offsetData = (upThis.meta?.seamstressOffset ?? 0) + subchunkData.offsetStream;
 						subchunkData.context = seamContext;
@@ -872,42 +890,56 @@ let Seamstress = class Seamstress {
 						case 3: {
 							// Type read
 							typeBuffer[readState] = e;
-							if ((upThis.type & upThis.MASK_TYPE) === upThis.TYPE_4CC) {
-								readState ++;
-							} else if ((upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
-								// RVLV-8 types
-								let rvlvState = e & IntegerHandler.MASK_RVLV;
-								if (readState === 0) {
-									if (rvlvState === IntegerHandler.RVLV_SINGLE) {
-										readState = 4;
-										ptr ++;
-										break;
-									} else if (rvlvState !== IntegerHandler.RVLV_START) {
-										throw(new Error(`Invalid RVLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not start RVLV-8 on the first byte.`));
-									};
+							switch (upThis.#type & upThis.MASK_TYPE) {
+								case upThis.TYPE_4CC: {
 									readState ++;
-								} else if (readState === 3) {
-									if (rvlvState !== IntegerHandler.RVLV_END) {
-										throw(new Error(`Invalid RVLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end RVLV-8 on the last possible byte.`));
-									};
-									readState = 4;
-								} else if (rvlvState === IntegerHandler.RVLV_END) {
-									readState = 4;
-								} else {
-									readState ++;
+									break;
 								};
-							} else {
-								// VLV-8 types
-								let vlvState = e & IntegerHandler.MASK_VLV;
-								if (readState === 3) {
-									if (vlvState) {
-										throw(new Error(`Invalid VLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end VLV-8 on the last possible byte.`));
+								case upThis.TYPE_UI8: {
+									if (readState !== 0) {
+										throw(new Error(`Invalid read state for type.`));
 									};
 									readState = 4;
-								} else if (vlvState) {
-									readState ++;
-								} else {
-									readState = 4;
+									break;
+								};
+								case upThis.TYPE_VLV: {
+									if ((upThis.#type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
+										// RVLV-8 types
+										let rvlvState = e & IntegerHandler.MASK_RVLV;
+										if (readState === 0) {
+											if (rvlvState === IntegerHandler.RVLV_SINGLE) {
+												readState = 4;
+												ptr ++;
+												break;
+											} else if (rvlvState !== IntegerHandler.RVLV_START) {
+												throw(new Error(`Invalid RVLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not start RVLV-8 on the first byte.`));
+											};
+											readState ++;
+										} else if (readState === 3) {
+											if (rvlvState !== IntegerHandler.RVLV_END) {
+												throw(new Error(`Invalid RVLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end RVLV-8 on the last possible byte.`));
+											};
+											readState = 4;
+										} else if (rvlvState === IntegerHandler.RVLV_END) {
+											readState = 4;
+										} else {
+											readState ++;
+										};
+									} else {
+										// VLV-8 types
+										let vlvState = e & IntegerHandler.MASK_VLV;
+										if (readState === 3) {
+											if (vlvState) {
+												throw(new Error(`Invalid VLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end VLV-8 on the last possible byte.`));
+											};
+											readState = 4;
+										} else if (vlvState) {
+											readState ++;
+										} else {
+											readState = 4;
+										};
+									};
+									break;
 								};
 							};
 							break;
@@ -921,42 +953,49 @@ let Seamstress = class Seamstress {
 						case 7: {
 							// Size read
 							sizeBuffer[readState - 4] = e;
-							if ((upThis.type & upThis.MASK_LENGTH) === upThis.LENGTH_U32) {
-								readState ++;
-							} else if ((upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
-								// RVLV-8 sizes
-								let rvlvState = e & IntegerHandler.MASK_RVLV;
-								if (readState === 4) {
-									if (rvlvState === IntegerHandler.RVLV_SINGLE) {
-										readState = 8;
-										ptr ++;
-										break;
-									} else if (rvlvState !== IntegerHandler.RVLV_START) {
-										throw(new Error(`Invalid RVLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not start RVLV-8 on the first byte.`));
-									};
+							switch (upThis.#type & upThis.MASK_LENGTH) {
+								case upThis.LENGTH_U32: {
 									readState ++;
-								} else if (readState === 7) {
-									if (rvlvState !== IntegerHandler.RVLV_END) {
-										throw(new Error(`Invalid RVLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end RVLV-8 on the last possible byte.`));
-									};
-									readState = 8;
-								} else if (rvlvState === IntegerHandler.RVLV_END) {
-									readState = 8;
-								} else {
-									readState ++;
+									break;
 								};
-							} else {
-								// VLV-8 sizes
-								let vlvState = e & IntegerHandler.MASK_VLV;
-								if (readState === 7) {
-									if (vlvState) {
-										throw(new Error(`Invalid VLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end VLV-8 on the last possible byte.`));
+								case upThis.LENGTH_VLV: {
+									if ((upThis.#type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
+										// RVLV-8 sizes
+										let rvlvState = e & IntegerHandler.MASK_RVLV;
+										if (readState === 4) {
+											if (rvlvState === IntegerHandler.RVLV_SINGLE) {
+												readState = 8;
+												ptr ++;
+												break;
+											} else if (rvlvState !== IntegerHandler.RVLV_START) {
+												throw(new Error(`Invalid RVLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not start RVLV-8 on the first byte.`));
+											};
+											readState ++;
+										} else if (readState === 7) {
+											if (rvlvState !== IntegerHandler.RVLV_END) {
+												throw(new Error(`Invalid RVLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end RVLV-8 on the last possible byte.`));
+											};
+											readState = 8;
+										} else if (rvlvState === IntegerHandler.RVLV_END) {
+											readState = 8;
+										} else {
+											readState ++;
+										};
+									} else {
+										// VLV-8 sizes
+										let vlvState = e & IntegerHandler.MASK_VLV;
+										if (readState === 7) {
+											if (vlvState) {
+												throw(new Error(`Invalid VLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end VLV-8 on the last possible byte.`));
+											};
+											readState = 8;
+										} else if (vlvState) {
+											readState ++;
+										} else {
+											readState = 8;
+										};
 									};
-									readState = 8;
-								} else if (vlvState) {
-									readState ++;
-								} else {
-									readState = 8;
+									break;
 								};
 							};
 							break;
@@ -970,30 +1009,53 @@ let Seamstress = class Seamstress {
 						// Read both type and size at once.
 						chunkType = undefined;
 						chunkSize = undefined;
-						if ((upThis.type & upThis.MASK_TYPE) === upThis.TYPE_4CC) {
-							chunkType = upThis.#l9Dec.decode(typeBuffer);
-						} else if ((upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
-							chunkType = IntegerHandler.readRVLV(typeBuffer);
-						} else {
-							chunkType = IntegerHandler.readVLV(typeBuffer);
+						switch (upThis.#type & upThis.MASK_TYPE) {
+							case upThis.TYPE_4CC: {
+								chunkType = upThis.#l9Dec.decode(typeBuffer);
+								break;
+							};
+							case upThis.TYPE_UI8: {
+								chunkType = typeBuffer[0];
+								break;
+							};
+							case upThis.TYPE_VLV: {
+								if ((upThis.#type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
+									chunkType = IntegerHandler.readRVLV(typeBuffer);
+								} else {
+									chunkType = IntegerHandler.readVLV(typeBuffer);
+								};
+								break;
+							};
 						};
 						if (typeof chunkType === "undefined") {
 							throw(new Error(`${dPrefix2}: Chunk type read failed.`));
 						};
-						if ((upThis.type & upThis.MASK_LENGTH) === upThis.LENGTH_U32) {
-							chunkSize = IntegerHandler.readUint32(sizeBuffer, (upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L);
-						} else if ((upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
-							chunkSize = IntegerHandler.readRVLV(sizeBuffer);
-						} else {
-							chunkSize = IntegerHandler.readVLV(sizeBuffer);
+						switch (upThis.#type & upThis.MASK_LENGTH) {
+							case upThis.LENGTH_U32: {
+								chunkSize = IntegerHandler.readUint32(sizeBuffer, (upThis.#type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L);
+								break;
+							};
+							case upThis.LENGTH_VLV: {
+								if ((upThis.#type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
+									chunkSize = IntegerHandler.readRVLV(sizeBuffer);
+								} else {
+									chunkSize = IntegerHandler.readVLV(sizeBuffer);
+								}
+								break;
+							};
 						};
 						if (typeof chunkSize === "undefined") {
 							throw(new Error(`${dPrefix2}: Chunk size read failed.`));
 						} else {
 							skipLength = chunkSize;
-							if ((upThis.type & upThis.MASK_PADDED) && (chunkSize & 1)) {
-								// Pad to a multiple of 2 when specified.
-								skipLength += 1;
+							switch (upThis.#type & upThis.MASK_PADDED) {
+								case upThis.PAD_EVEN: {
+									if (chunkSize & 1) {
+										// Pad to a multiple of 2 when specified.
+										skipLength += 1;
+									};
+									break;
+								};
 							};
 						};
 						shouldEnqueue = true;
@@ -1022,7 +1084,7 @@ let Seamstress = class Seamstress {
 								};
 								console.debug(`[Seamstress CHLD] Started a new child stream for chunk "${chunkType}" at depth ${upThis.meta.seamstressDepth}.`);
 								(async () => {
-									for await (let childChunk of childStreamRead.readStream(childStreamHost.readable)) {
+									for await (let childChunk of childStreamRead.#readStreamInternal(childStreamHost.readable)) {
 										console.debug(`[Seamstress WAIT] Waiting for the next chunk from depth ${upThis.meta.seamstressDepth + 1} at depth ${upThis.meta.seamstressDepth}.`);
 										await streamHost.enqueue(childChunk);
 										let childReadBytes = childChunk.offsetStream + childChunk.data.length;
@@ -1054,9 +1116,16 @@ let Seamstress = class Seamstress {
 					if (skipLength > 0 || shouldEnqueue) {
 						if (skipLength + ptr < chunk.length) {
 							let subchunkData = new SeamstressChunk(seamChunkId, seamChunkMap.get(chunkType), chunkType, 0, chunkSize);
-							subchunkData.data = chunk.subarray(ptr, ptr + skipLength);
-							if (upThis.type & upThis.MASK_PADDED && subchunkData.size & 1) {
-								subchunkData.data = subchunkData.data.subarray(0, subchunkData.data.length - 1);
+							if (!(dropData && childStreamHost?.readable != null && childStreamHost?.closed)) {
+								subchunkData.data = chunk.subarray(ptr, ptr + skipLength);
+								switch (upThis.#type & upThis.MASK_PADDED) {
+									case upThis.PAD_EVEN: {
+										if (subchunkData.size & 1) {
+											subchunkData.data = subchunkData.data.subarray(0, subchunkData.data.length - 1);
+										};
+										break;
+									};
+								};
 							};
 							subchunkData.offsetStream = chunkStart + ptr;
 							subchunkData.offsetData = (upThis.meta?.seamstressOffset ?? 0) + subchunkData.offsetStream;
@@ -1069,9 +1138,16 @@ let Seamstress = class Seamstress {
 							seamChunkId ++;
 						} else {
 							let subchunkData = new SeamstressChunk(seamChunkId, seamChunkMap.get(chunkType), chunkType, 0, chunkSize);
-							subchunkData.data = chunk.subarray(ptr);
-							if (upThis.type & upThis.MASK_PADDED && subchunkData.size & 1) {
-								subchunkData.data = subchunkData.data.subarray(0, subchunkData.data.length - 1);
+							if (!(dropData && childStreamHost?.readable != null && childStreamHost?.closed)) {
+								subchunkData.data = chunk.subarray(ptr);
+								switch (upThis.#type & upThis.MASK_PADDED) {
+									case upThis.PAD_EVEN: {
+										if (subchunkData.size & 1) {
+											subchunkData.data = subchunkData.data.subarray(0, subchunkData.data.length - 1);
+										};
+										break;
+									};
+								};
 							};
 							subchunkData.offsetStream = chunkStart + ptr;
 							subchunkData.offsetData = (upThis.meta?.seamstressOffset ?? 0) + subchunkData.offsetStream;
@@ -1114,14 +1190,17 @@ let Seamstress = class Seamstress {
 		});
 		return streamHost.readable;
 	};
+	readStream(stream) {
+		return this.#readStreamInternal(stream);
+	};
 	regulateStream;
 	readRegulated(stream, flushAll = false) {
-		let upThis = this;
+		const upThis = this;
 		if (typeof upThis.regulateStream !== "function") {
 			throw(new TypeError("The stream regulator must be a defined function."));
 		};
 		let streamHost = new StreamQueue();
-		let unbuffered = upThis.readStream(stream);
+		let unbuffered = upThis.#readStreamInternal(stream);
 		let buffer = []; // Maybe a linked list will fit better here? Dynamic arrays could be expensive.
 		let id, chunkId, type, size, context;
 		let isOffsetWritten = false, offset = 0, offsetData = 0, offsetStream = 0;
@@ -1196,9 +1275,9 @@ let Seamstress = class Seamstress {
 		return streamHost.readable;
 	};
 	readChunks(stream, flushAll = false) {
-		let upThis = this;
+		const upThis = this;
 		let streamHost = new StreamQueue();
-		let unbuffered = upThis.readStream(stream, true);
+		let unbuffered = upThis.#readStreamInternal(stream); // What was the original `true` as the 2nd argument for?
 		let buffer = []; // Maybe a linked list will fit better here? Dynamic arrays could be expensive.
 		let inProgress = false;
 		let id, chunkId, type, size, context, offsetData, offsetStream;
@@ -1206,8 +1285,18 @@ let Seamstress = class Seamstress {
 			for await (let unbufferedChunk of unbuffered) {
 				let sizeSum = unbufferedChunk.offset + unbufferedChunk.data.length;
 				if (sizeSum > unbufferedChunk.size) {
-					if (!(upThis.type & upThis.MASK_PADDED && unbufferedChunk.size + 1 === sizeSum)) {
-						throw(new Error(`The total sum of size exceeded declaration (${sizeSum} > ${unbufferedChunk.size}).`));
+					const errorMessage = `The total sum of size exceeded declaration (${sizeSum} > ${unbufferedChunk.size}).`;
+					switch (upThis.#type & upThis.MASK_PADDED) {
+						case upThis.PAD_NONE: {
+							throw(new Error(errorMessage));
+							break;
+						};
+						case upThis.PAD_EVEN: {
+							if (unbufferedChunk.size + 1 !== sizeSum) {
+								throw(new Error(errorMessage));
+							};
+							break;
+						};
 					};
 				} else if (sizeSum === unbufferedChunk.size) {
 					// Commit now!
@@ -1268,184 +1357,57 @@ let Seamstress = class Seamstress {
 	writeStrict(headerSerializer) {};
 	writeChunks(serializedHeader) {};
 	async getMapFromStream(stream) {
-		let upThis = this;
-		let skipLength = upThis.headerSize,
-		chunkStart = 0,
-		typeBuffer = new Uint8Array(4),
-		sizeBuffer = new Uint8Array(4),
-		readState = 0,
-		map = new Map();
-		/*
-		`readState` has the following states.
-		0-3: TYPE_READ_B0...3
-		4-7: SIZE_READ_B0...3
-		8:   BUFFER_SERIALIZE
-		*/
-		for await (let chunk of stream) {
-			if (skipLength >= chunk.length) {
-				skipLength -= chunk.length;
-				chunkStart += chunk.length;
+		const upThis = this;
+		let map = new Map();
+		for await (const chunk of upThis.#readStreamInternal(stream, true)) {
+			if (chunk.offset > 0) {
 				continue;
 			};
-			let ptr = skipLength;
-			skipLength = 0;
-			while (ptr < chunk.length) {
-				//console.debug(`${chunkStart + ptr}(${chunkStart} + ${ptr}) - ${readState}`);
-				let e = chunk[ptr];
-				switch (readState) {
-					case 0: {
-						typeBuffer.fill(0);
-						// Should fall through
-					};
-					case 1:
-					case 2:
-					case 3: {
-						// Type read
-						typeBuffer[readState] = e;
-						if ((upThis.type & upThis.MASK_TYPE) === upThis.TYPE_4CC) {
-							readState ++;
-						} else if ((upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
-							// RVLV-8 types
-							let rvlvState = e & IntegerHandler.MASK_RVLV;
-							if (readState === 0) {
-								if (rvlvState === IntegerHandler.RVLV_SINGLE) {
-									readState = 4;
-								} else if (rvlvState !== IntegerHandler.RVLV_START) {
-									throw(new Error(`Invalid RVLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not start RVLV-8 on the first byte.`));
-								};
-								readState ++;
-							} else if (readState === 3) {
-								if (rvlvState !== IntegerHandler.RVLV_END) {
-									throw(new Error(`Invalid RVLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end RVLV-8 on the last possible byte.`));
-								};
-								readState = 4;
-							} else if (rvlvState === IntegerHandler.RVLV_END) {
-								readState = 4;
-							} else {
-								readState ++;
-							};
-						} else {
-							// VLV-8 types
-							let vlvState = e & IntegerHandler.MASK_VLV;
-							if (readState === 3) {
-								if (vlvState) {
-									throw(new Error(`Invalid VLV-8 type read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end VLV-8 on the last possible byte.`));
-								};
-								readState = 4;
-							} else if (vlvState) {
-								readState ++;
-							} else {
-								readState = 4;
-							};
-						};
-						break;
-					};
-					case 4: {
-						sizeBuffer.fill(0);
-						// Should fall through
-					};
-					case 5:
-					case 6:
-					case 7: {
-						// Size read
-						sizeBuffer[readState - 4] = e;
-						if ((upThis.type & upThis.MASK_LENGTH) === upThis.LENGTH_U32) {
-							readState ++;
-						} else if ((upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
-							// RVLV-8 sizes
-							let rvlvState = e & IntegerHandler.MASK_RVLV;
-							if (readState === 4) {
-								if (rvlvState === IntegerHandler.RVLV_SINGLE) {
-									readState = 8;
-								} else if (rvlvState !== IntegerHandler.RVLV_START) {
-									throw(new Error(`Invalid RVLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not start RVLV-8 on the first byte.`));
-								};
-								readState ++;
-							} else if (readState === 7) {
-								if (rvlvState !== IntegerHandler.RVLV_END) {
-									throw(new Error(`Invalid RVLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end RVLV-8 on the last possible byte.`));
-								};
-								readState = 8;
-							} else if (rvlvState === IntegerHandler.RVLV_END) {
-								readState = 8;
-							} else {
-								readState ++;
-							};
-						} else {
-							// VLV-8 sizes
-							let vlvState = e & IntegerHandler.MASK_VLV;
-							if (readState === 7) {
-								if (vlvState) {
-									throw(new Error(`Invalid VLV-8 size read state ${readState} encountered at offset ${chunkStart + ptr}: Did not end VLV-8 on the last possible byte.`));
-								};
-								readState = 8;
-							} else if (vlvState) {
-								readState ++;
-							} else {
-								readState = 8;
-							};
-						};
-						break;
-					};
-					default: {
-						throw(new Error(`Invalid read state ${readState} encountered at offset ${chunkStart + ptr}.`));
-					};
-				};
-				if (readState === 8) {
-					// Read both type and size at once.
-					let chunkType, chunkSize;
-					if ((upThis.type & upThis.MASK_TYPE) === upThis.TYPE_4CC) {
-						chunkType = upThis.#l9Dec.decode(typeBuffer);
-					} else if ((upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
-						chunkType = IntegerHandler.readRVLV(typeBuffer);
-					} else {
-						chunkType = IntegerHandler.readVLV(typeBuffer);
-					};
-					if (typeof chunkType === "undefined") {
-						throw(new Error(`Chunk type read failed at offset ${chunkStart + ptr}.`));
-					};
-					if ((upThis.type & upThis.MASK_LENGTH) === upThis.LENGTH_U32) {
-						chunkSize = IntegerHandler.readUint32(sizeBuffer, (upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L);
-					} else if ((upThis.type & upThis.MASK_ENDIAN) === upThis.ENDIAN_L) {
-						chunkSize = IntegerHandler.readRVLV(sizeBuffer);
-					} else {
-						chunkSize = IntegerHandler.readVLV(sizeBuffer);
-					};
-					if (typeof chunkSize === "undefined") {
-						throw(new Error(`Chunk size read failed at offset ${chunkStart + ptr}.`));
-					} else {
-						skipLength = chunkSize;
-						if ((upThis.type & upThis.MASK_PADDED) && (chunkSize & 1)) {
-							// Pad to a multiple of 2 when specified.
-							skipLength += 1;
-						};
-					};
-					//console.debug(`Chunk ${JSON.stringify(chunkType)}: ${chunkSize} B`);
-					if (!map.has(chunkType)) {
-						map.set(chunkType, []);
-					};
-					map.get(chunkType).push([chunkStart + ptr + 1, chunkSize]);
-					readState = 0;
-				};
-				ptr ++;
-				if (skipLength > 0) {
-					if (skipLength + ptr < chunk.length) {
-						ptr += skipLength;
-						skipLength = 0;
-					} else {
-						skipLength += ptr - chunk.length;
-						ptr = chunk.length;
-					};
-				} else if (skipLength < 0) {
-					skipLength = 0;
-				};
+			if (!map.has(chunk.type)) {
+				map.set(chunk.type, []);
 			};
-			chunkStart += chunk.length;
+			map.get(chunk.type).push([chunk.offsetData, chunk.size]);
 		};
 		return map;
 	};
-	constructor() {
-		this.addCollection("LIST");
+	constructor(typeFlags) {
+		if (typeof typeFlags !== "number") {
+			throw(new TypeError(`Stream type flags must be defined as an integer.`));
+		};
+		if (!Number.isSafeInteger(typeFlags)) {
+			throw(new TypeError(`Stream type flags must be defined as a valid integer.`));
+		};
+		const upThis = this;
+		switch (typeFlags & upThis.MASK_LENGTH) {
+			case upThis.LENGTH_VLV:
+			case upThis.LENGTH_U32: {
+				break;
+			};
+			default: {
+				throw(new Error(`Length type not implemented.`));
+			};
+		};
+		switch (typeFlags & upThis.MASK_PADDED) {
+			case upThis.PAD_NONE:
+			case upThis.PAD_EVEN: {
+				break;
+			};
+			default: {
+				throw(new Error(`Padding type not implemented.`));
+			};
+		};
+		switch (typeFlags & upThis.MASK_TYPE) {
+			case upThis.TYPE_VLV:
+			case upThis.TYPE_UI8:
+			case upThis.TYPE_4CC: {
+				break;
+			};
+			default: {
+				throw(new Error(`Chunk type not implemented.`));
+			};
+		};
+		upThis.#type = typeFlags;
+		upThis.addCollection("LIST");
 	};
 };
 

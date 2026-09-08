@@ -3,7 +3,7 @@
 import {
 	IntegerHandler,
 	Seamstress
-} from "../../libs/seamstress@ltgcgo/index.mjs";
+} from "../../libs/seamstress@ltgcgo/seamstress/index.mjs";
 import {
 	$e, $a
 } from "../../libs/lightfelt@ltgcgo/main/quickPath";
@@ -33,11 +33,13 @@ const fileTypes = {
 	"xws": "xws",
 	"aif": "iff",
 	"aiff": "iff",
+	"bun": "riff",
 	"dls": "riff",
 	"rmi": "riff",
 	"sf2": "riff",
 	"wav": "riff",
 	"webp": "riff",
+	"wrk": "wrk",
 	"rseam": "rseam",
 	"vseam": "vseam"
 };
@@ -46,6 +48,32 @@ for (let extension in fileTypes) {
 	fileProps.extensions.push(`.${extension.toUpperCase()}`);
 };
 //console.debug(fileProps);
+
+/** @type {Map<number, string>} */
+const cakewalkTypesMapping = new Map();
+// https://kb.ltgc.cc/octavia/impl/format/wrk.html
+cakewalkTypesMapping.set(0x03, "masterSettings");
+cakewalkTypesMapping.set(0x08, "comments");
+cakewalkTypesMapping.set(0x0a, "timing");
+cakewalkTypesMapping.set(0x0b, "smpte");
+cakewalkTypesMapping.set(0x0d, "trackLoop");
+cakewalkTypesMapping.set(0x0e, "trackPatch");
+cakewalkTypesMapping.set(0x0f, "tempoMap");
+cakewalkTypesMapping.set(0x10, "thruSettings");
+cakewalkTypesMapping.set(0x12, "lyrics");
+cakewalkTypesMapping.set(0x15, "markers");
+cakewalkTypesMapping.set(0x16, "textEvents");
+cakewalkTypesMapping.set(0x17, "metreKeyMap");
+cakewalkTypesMapping.set(0x1a, "projectMetadataEntry");
+cakewalkTypesMapping.set(0x24, "trackPrefix");
+cakewalkTypesMapping.set(0x2c, "sysExBulk");
+cakewalkTypesMapping.set(0x2d, "trackEvents");
+cakewalkTypesMapping.set(0x31, "prefixEvents");
+cakewalkTypesMapping.set(0x32, "unknownMultiParam1");
+cakewalkTypesMapping.set(0x46, "unknownTrackSettings2");
+cakewalkTypesMapping.set(0x4a, "savedSoftwareVersion");
+cakewalkTypesMapping.set(0x5c, "unknownTrackSettings1");
+cakewalkTypesMapping.set(0x6d, "audioMixerSettings");
 
 let summarizeSeamstressChunk = (sChunk) => {
 	return `#${sChunk.id} (${sChunk.type}, #${sChunk.chunkId}): ${sChunk.offset}/${sChunk.size}, ${sChunk.data.length} B.`;
@@ -69,12 +97,11 @@ let showResult = async (stream, props = {}) => {
 	try {
 		switch (props.targetMode) {
 			case "smf": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32);
 				rawParser.headerSize = 0;
-				rawParser.type = Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32;
 				rawParser.regulateStream = MICCInternalsSMF.streamRegulator;
 				rawParser.debugMode = !!self.debugMode;
-				let splitStream = stream.tee();
+				const splitStream = stream.tee();
 				(async () => {
 					for await (let chunk of rawParser.readRegulated(splitStream[1])) {
 						rawParser.debugMode && console.debug(summarizeSeamstressChunk(chunk));
@@ -94,19 +121,17 @@ let showResult = async (stream, props = {}) => {
 				break;
 			};
 			case "iff": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32 | Seamstress.PAD_EVEN);
 				rawParser.headerSize = 12;
-				rawParser.type = rawParser.TYPE_4CC | rawParser.ENDIAN_B | rawParser.LENGTH_U32 | rawParser.MASK_PADDED;
 				//rawParser.debugMode = true;
 				readStream = rawParser.readChunks(stream);
 				break;
 			};
 			case "riff": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32 | Seamstress.PAD_EVEN);
 				rawParser.headerSize = 12;
-				rawParser.type = rawParser.TYPE_4CC | rawParser.ENDIAN_L | rawParser.LENGTH_U32 | rawParser.MASK_PADDED;
 				//rawParser.debugMode = true;
-				let splitStream = stream.tee();
+				const splitStream = stream.tee();
 				(async () => {
 					for await (let chunk of rawParser.readChunks(splitStream[1])) {
 						console.debug(summarizeSeamstressChunk(chunk));
@@ -119,11 +144,28 @@ let showResult = async (stream, props = {}) => {
 				break;
 			};
 			case "xws": {
-				let rawParser = new Seamstress();
+				const rawParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32);
 				rawParser.headerSize = 0;
-				rawParser.type = Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32;
-				rawParser.debugMode = true;
+				//rawParser.debugMode = true;
 				readStream = rawParser.readChunks(stream);
+				break;
+			};
+			case "wrk": {
+				const rawParser = new Seamstress(Seamstress.TYPE_UI8 | Seamstress.ENDIAN_L | Seamstress.LENGTH_U32);
+				rawParser.headerSize = 11;
+				//rawParser.debugMode = true;
+				const splitStream = stream.tee();
+				(async () => {
+					for (const type of await rawParser.getMapFromStream(splitStream[1])) {
+						const mappedResult = cakewalkTypesMapping.get(type[0]);
+						if (mappedResult) {
+							console.info(`Cakewalk type 0x${type[0].toString(16).padStart(2, "0")}: 12tone.cakewalk.${mappedResult}`);
+						} else {
+							console.warn(`Cakewalk type 0x${type[0].toString(16).padStart(2, "0")}: unknown`);
+						};
+					};
+				})();
+				readStream = rawParser.readChunks(splitStream[0]);
 				break;
 			};
 			default: {
@@ -132,13 +174,18 @@ let showResult = async (stream, props = {}) => {
 		};
 		resultDisplay.append(`\nType          No.     Offset      Size`);
 	} catch (err) {
+		console.error(err);
 		resultDisplay.append(`\nUncaught ${err.name}: ${err.message ?? "No error message was provided."}\n${err.stack}`);
 	};
 	try {
 		for await (let chunk of readStream) {
 			let showKey = chunk.type;
 			if (typeof chunk.type === "number") {
-				showKey = `0x${chunk.type.toString(16)}`;
+				if (chunk.type >= 0 && chunk.type < 255) {
+					showKey = `0x${chunk.type.toString(16).padStart(2, "0")} (${chunk.type})`;
+				} else {
+					showKey = `0x${chunk.type.toString(16).padStart(8, "0")}`;
+				};
 			};
 			showKey = showKey.padEnd(10, " ");
 			if (chunk.chunkId === 0) {

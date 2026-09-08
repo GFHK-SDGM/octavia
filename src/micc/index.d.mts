@@ -7,9 +7,14 @@
 */
 
 import type {
+	uint8,
+	uint16,
+	uint32
+} from "../../libs/seamstress@ltgcgo/nativeType/index.d.mts";
+import type {
 	SeamstressChunk,
 	SeamstressContext
-} from "../../libs/seamstress@ltgcgo/index.d.mts";
+} from "../../libs/seamstress@ltgcgo/seamstress/index.d.mts";
 
 /** The helper string decoder allowing re-interpretation. */
 export class BinaryString {
@@ -34,71 +39,82 @@ export class BinaryString {
 /** Utility constants for MICC. */
 declare class MICCConstants {
 	/** Note off events. */
-	static MIDI_NOTE_OFF: number;
+	static MIDI_NOTE_OFF: uint8;
 	/** Note on events. */
-	static MIDI_NOTE_ON: number;
+	static MIDI_NOTE_ON: uint8;
 	/** Note/polyphonic aftertouch events. */
-	static MIDI_NOTE_AT: number;
+	static MIDI_NOTE_AT: uint8;
 	/** Control change events. */
-	static MIDI_CONTROL: number;
+	static MIDI_CONTROL: uint8;
 	/** Program change events. */
-	static MIDI_PROGRAM: number;
+	static MIDI_PROGRAM: uint8;
 	/** Channel aftertouch events. */
-	static MIDI_CHANNEL_AT: number;
+	static MIDI_CHANNEL_AT: uint8;
 	/** Channel pitch bend events. */
-	static MIDI_CHANNEL_PITCH: number;
+	static MIDI_CHANNEL_PITCH: uint8;
 	/** New SysEx events. */
-	static MIDI_SYSEX_NEW: number;
+	static MIDI_SYSEX_NEW: uint8;
 	/** Resumed SysEx events. */
-	static MIDI_SYSEX_RESUME: number;
+	static MIDI_SYSEX_RESUME: uint8;
 	/** MIDI clock events. Should not appear in files. */
-	static MIDI_CLOCK: number;
+	static MIDI_CLOCK: uint8;
 	/** MIDI play control start events. Should not appear in files. */
-	static MIDI_START: number;
+	static MIDI_START: uint8;
 	/** MIDI play control continue events. Should not appear in files. */
-	static MIDI_RESUME: number;
+	static MIDI_RESUME: uint8;
 	/** MIDI play control stop events. Should not appear in files. */
-	static MIDI_STOP: number;
+	static MIDI_STOP: uint8;
 	/** MIDI active sensing events. Should not appear in files. */
-	static MIDI_ACTIVE_SENSE: number;
+	static MIDI_ACTIVE_SENSE: uint8;
 	/** Metadata events. */
-	static MIDI_METADATA: number;
+	static MIDI_METADATA: uint8;
 	/** Track pointer block: normal. Compatible with XGworks. */
-	static PTRB_NORMAL: number;
+	static PTRB_NORMAL: uint16;
 	/** Track pointer block: linked (pointer). Compatible with XGworks. */
-	static PTRB_LINKED: number;
+	static PTRB_LINKED: uint16;
 	/** Finalisation type: MIDI. */
 	static AS_MIDI: number;
 	/** Finalisation type: Tracker. */
 	static AS_TRACKER: number;
 	/** File type: SMF type 0 - single track. */
-	static FILE_SMF_SINGLE: number;
+	static FILE_SMF_SINGLE: uint16;
 	/** File type: SMF type 1 - multiple tracks. */
-	static FILE_SMF_MULTIPLE: number;
+	static FILE_SMF_MULTIPLE: uint16;
 	/** File type: SMF type 2 - sequential tracks. */
-	static FILE_SMF_SEQUENTIAL: number;
+	static FILE_SMF_SEQUENTIAL: uint16;
 	/** File type: XGworks project. */
-	static FILE_SEQ_XGWORKS: number;
+	static FILE_SEQ_CAKEWALK: uint16;
+	/** File type: XGworks project. */
+	static FILE_SEQ_XGWORKS: uint16;
 	/** File type: FastTracker II (XM). Support postponed until needed. */
-	static FILE_TRK_FAST2: number;
+	static FILE_TRK_FAST2: uint16;
 	/** File type: Scream Tracker 3 (S3M). Support postponed until needed. */
-	static FILE_TRK_SCREAM3: number;
+	static FILE_TRK_SCREAM3: uint16;
 	/** File type: Impulse Tracker (IT). */
-	static FILE_TRK_IMPULSE: number;
+	static FILE_TRK_IMPULSE: uint16;
 }
-/** Base type that can populate `MICCTrack`. */
+/** Base type for some MICC classes.
+*
+* The group specifier is `ltgc.micc.unknown`. */
 export class MICCBaseElement {
-	/** The assigned group specifier. For standard MIDI events, this is always set to `mma.midiEvent`. */
+	/** The assigned group specifier. */
 	group: string;
+	constructor(group: string);
 }
-/** Representation of a MIDI event. The group specifier is `micc.baseEvent`. */
-export class MIDIBaseEvent extends MICCBaseElement {
+/** Base type for subtypes capable of populating tracks.
+*
+* The group specifier is `ltgc.micc.trackChild`. */
+export class MICCTrackElement extends MICCBaseElement {}
+/** Representation of a MIDI event.
+*
+* The group specifier is `ltgc.micc.baseEvent`. */
+export class MIDIBaseEvent extends MICCTrackElement {
 	/** Delta time. The time difference of the current event and the previous event. Defaults to `0`. */
-	delta: number;
+	delta: uint32;
 	/** MIDI event type. Type `8` to `14`, and `240` to `255` are all available. `0` means "unset". */
-	type: number;
+	type: uint8;
 	/** The desinated channel of the MIDI event. Valid values range from `0` to `255` for events without port defined, or `0` to `15` for events with port defined. Will be null by default for `0xf0`-`0xff` events, while some `0xff` events will have `ch` and `port` attached by the event funnel or the finaliser. Defaults to `null`. */
-	ch?: number;
+	ch?: uint8;
 	/** The raw data of the MIDI event. */
 	data: Uint8Array;
 	/** The offset of the current event in the original root event stream, if the current event was created from a file-like binary event stream (e.g. SMF). Useful for debugging, unused by assemblers and serializers. This isn't the chunk offset value. */
@@ -106,22 +122,27 @@ export class MIDIBaseEvent extends MICCBaseElement {
 	/** The parsed value of the event set by the finaliser, can be decoded strings. Only applicable to some `0xff` (meta) events, unused by assemblers and serializers. */
 	parsed?: number|string;
 	/** The parsed time in MIDI ticks, usually set by the event funnel. Use a time offset map to grab the actual seconds. Unused by assemblers and serializers. */
-	time?: number;
+	tick?: number;
 	/** The port for the event, usually set by the event funnel or the finaliser. Defaults to `null`. Unless used by multi-port event transports, this is unused by assemblers and serializers. */
-	port?: number;
+	port?: uint8;
 	/** Populated if the parsed value has additional data. If the parsed value is a string, this property can denote the text encoding used. Unused by assemblers and serializers. */
 	label?: any;
+	constructor(group?: string);
 }
-/** Representation of a MIDI 1.0 event and an SMF event. The group specifier is `mma.midiEvent`. */
+/** Representation of a MIDI 1.0 event and an SMF event.
+*
+* The group specifier is `mma.midiEvent`. */
 export class MIDINakedEvent extends MIDIBaseEvent {
 	/** The meta event type. Only applicable to `0xff` (meta) events. Defaults to `null`. */
-	meta?: number;
+	meta?: uint8;
 	/** True means that the running status of the current event was inherited from the previous event. `0xf0`-`0xff` events always have this byte set to false. Valid omissions will be reflected in serialisers. */
 	isStale: boolean;
 	/** The track number for the event, usually set by the event funnel. Defaults to `null`. Unused by assemblers and serializers. */
-	track?: number;
+	track?: uint32;
 }
-/** Representation of a MIDI 2.0 event. The group specifier is `mma.midiUmp`. */
+/** Representation of a MIDI 2.0 event.
+*
+* The group specifier is `mma.midiUmp`. */
 export class MIDIUMPEvent extends MIDIBaseEvent {
 }
 /** An intermediate object consumed by Octavia's parser and serialiser. */
@@ -135,9 +156,9 @@ export class WrappedMIDIEvent {
 }
 declare interface MICCSMFMIAParserContext {
 	/** Status byte of the last event. Same as `MIDINakedEvent.type`. */
-	lastStatus?: number;
+	lastStatus?: uint8;
 	/** If the last event was a `dt` event. the delta time specified by it. Should always be reset to `0` for each non-`dt` event. Used only by the MIA parser. */
-	lastDelta?: number;
+	lastDelta?: uint32;
 	/** If the last SysEx event was not ended by `0xF7`. Used by parsers to reject invalid SysEx send states. */
 	lastSysExHung?: boolean;
 }
@@ -181,72 +202,90 @@ export class MICCInternalsSMF {
 	/** Regulates the incoming SMF stream. Set as `Seamstress.regulateStream()`. */
 	static streamRegulator(offset: number, subchunk: SeamstressChunk): number;
 }
-/** A pointer to the actual clip tracks. The group specifier is `micc.pointer`. */
-export class MICCPointer extends MICCBaseElement {
+/** A pointer to the actual clip tracks.
+*
+* The group specifier is `ltgc.micc.pointer`. */
+export class MICCPointer extends MICCTrackElement {
 	/** Type of the current pointer. Largely follows XGworks. */
-	type: number;
+	type: uint16;
 	/** Starting MIDI tick of the referred block. */
 	start: number;
 	/** Expected ending MIDI tick of the referred block. */
 	end: number;
 	/** Selected block ID. */
-	block: number;
+	block: uint32;
 	/** Name of the current block. Empty names will become undefined. */
 	name?: string;
-	/** The starting time of the current pointer, supplied by a finaliser. */
-	time?: number;
 	/** Direct object reference to the normal block, supplied by a finaliser. */
 	parsed?: MICCTrack;
 }
-/** A track containing events. */
-export class MICCTrack {
+/** A track containing events.
+*
+* The group identifier is `mma.smfTrack`. */
+export class MICCTrack extends MICCTrackElement {
 	/** Track type. For SMF and XWS files, this is usually the FourCC type. */
 	type: string;
 	/** Vendor specifier of the track type. */
 	vendor: string;
 	/** Data carried by the chunk, usually a list of events. */
-	data: MICCBaseElement[];
+	data: MICCTrackElement[];
 }
-/** The base class for oscillators and instruments. */
-declare class MICCBaseVoice {
+/** The base class for oscillators and instruments.
+*
+* The group specifier is `ltgc.micc.voice`. */
+declare class MICCBaseVoice extends MICCBaseElement {
 	/** The group type. `0` for single oscillators, `1` for grouped oscillators, `2` for instruments. */
-	group: number;
+	voiceGroup: uint8;
 }
-/** A defined oscillator. Represents a single oscillator (PCM samples, FM parameters, VL parameters, AN parameters...). */
+/** A defined oscillator. Represents a single oscillator (PCM samples, FM parameters, VL parameters, AN parameters...).
+*
+* The group specifier is `ltgc.micc.voice.single`. */
 export class MICCOscillator extends MICCBaseVoice {}
-/** A defined multi-oscillator. Represents a set of oscillators, commonly seen in KORG AI² synths in the form of multi-samples. Will always be referred to by an instrument, and direct usage in tracks will error out. */
+/** A defined multi-oscillator. Represents a set of oscillators, commonly seen in KORG AI² synths in the form of multi-samples. Will always be referred to by an instrument, and direct usage in tracks will error out.
+*
+* The group specifier is `ltgc.micc.voice.group`. */
 export class MICCOscillatorGroup extends MICCBaseVoice {}
-/** A defined instrument. */
+/** A defined instrument.
+*
+* The group specifier is `ltgc.micc.voice.instrument`. */
 export class MICCInstrument extends MICCBaseVoice {}
-/** The contained metadata of the current file. */
-export class MICCSequenceMetadata {
+/** Base type for metadata.
+*
+* The group specifier is `ltgc.micc.meta`. */
+export class MICCBaseMetadata extends MICCBaseElement {}
+/** The contained metadata of the current file.
+*
+* The group specifier is `ltgc.micc.meta.midi`. */
+export class MICCSequenceMetadata extends MICCBaseMetadata {
 	/** The full format specifier of the current file. */
 	format: string;
 	/** MIDI time division. `480` is the most common.
+	*
 	* For tracker music with 2, 3, 4, 5, 6, 8, 10, 12, 15, 16, 20, 24, 30, 32, 40, 48, 60, 80, 96, 120, 160 or 240 rows per beat, `480` will be used. `600` will be used with 25, 50, 75, 100, 150, 200, 300 or 600 rows. `720` will be used with 9, 18, 36, 40, 45, 72, 144, 180, 360, 720 rows. `960` will be used with 64, 192, 320, 480 or 960 rows. Any other value that doesn't have an existing mapping will cause the value `4096` be used, with the actual tick time be rounded to the nearest value.
+	*
 	* Patterns (measures) with overridden row numbers of beats, overiiden row numbers of measures, derived denominators not a power of 2, or derived non-integer nominators will have the value rounded up to the nearest equivalent valid MIDI time signature in the raw time signature MIDI event, then have custom meta events that shifts the offset map. */
-	division: number;
+	division: uint16;
 	/** Definition vary by file type.
 	*
-	* For SMF files, this indicates the SMF file type. For tracker files, this indicates the original format used. Full definition under `MICCConstants.FILE_*`. */
-	type: number;
+	* For Standard MIDI Files, this indicates the SMF file type. For tracker files, this indicates the original format used. Full definition under `MICCConstants.FILE_*`. */
+	type: uint16;
 	/** Amount of expected tracks. For tracker music, this denotes allocated channels instead. */
 	track?: number;
 	/** For files utilising pointers, amount of expected normal MIDI blocks/clips. This is typically seen in project (sequencer) files and tracker music. */
 	clip?: number;
 	/** For files utilising styles, amount of expected styles. Currently unused. */
 	style?: number;
-	/** For formats directly specifying names. Pure SMF files and XWS files don't have this field, but formats like tracker music modules and KORG SNG have it. */
+	/** For formats directly specifying names. Pure Standard MIDI Files and XWS files don't have this field, but formats like tracker music modules and KORG SNG have it. */
 	title?: string;
 }
 /** (WIP) A single edit record. */
 export class MICCEditRecord {}
 /** (WIP) A single MIDI macro. */
 export class MICCMacroMIDI {}
-/**
-* The contained additional metadata of the current file, only makes sense for trackers. Aims at 100% compatibility with [Impulse Tracker](https://breezewiki.com/fileformats/wiki/Impulse_tracker).
-*/
-export class MICCTrackerMetadata {
+/** The contained additional metadata of the current file, only makes sense for trackers. Aims at 100% compatibility with [Impulse Tracker](https://breezewiki.com/fileformats/wiki/Impulse_tracker).
+*
+* The group specifier is `ltgc.micc.meta.tracker`. */
+export class MICCTrackerMetadata extends MICCBaseMetadata {
 	/** If the file is a tracker. */
 	isTracker: boolean;
 	/** If true, G effect will be linked with E and F. Defaults to `false` for MIDI compatibility, while tracker files will always cause this field to be set accordingly.
@@ -320,7 +359,7 @@ export class MICCSequence {
 	markFinalised(): Promise<void>;
 	/** Runs the finalization process. Re-runs are useful for programs that mutate events, e.g. editors. */
 	finalise(asType: number): Promise<void>;
-	/** Runs the propagation process to convert parsed properties into data used by assemblers and serialisers. */
+	/** Runs the propagation process to convert parsed properties, which may have been modified, back into raw data used by assemblers and serialisers. */
 	propagate(asType: number): Promise<void>;
 	/** Used by parsers to reject the file.
 	* @param err The error object to be passed to both promise objects. */
@@ -338,7 +377,7 @@ export class MICCSequence {
 	meta: MICCSequenceMetadata;
 	/** If the current file is a tracker, the additional metadata of the current file. */
 	tracker: MICCTrackerMetadata;
-	/** The resource pool of the current file, usually used by pointer events. SMF files don't create this. */
+	/** The resource pool of the current file, usually used by pointer events. Standard MIDI Files don't create this. */
 	pool?: Map<string, MICCBaseElement[]>;
 	/** Tracks contained by the current file. */
 	tracks: MICCTrack[];
@@ -358,9 +397,9 @@ export class MICC extends MICCConstants {
 	// Pure MIDI.
 	/** Parse the incoming Standard MIDI File byte stream. */
 	parseSmf(data: ReadableStream<Uint8Array>, context?: object): MICCSequence;
-	/** Parse the incoming Musical Instructions Assembly (Octavia's 1:1 assembly representation of SMF files) stream. */
+	/** Parse the incoming Musical Instructions Assembly (Octavia's 1:1 assembly representation of Standard MIDI Files) stream. */
 	parseMia(data: ReadableStream<Uint8Array>, label?: string): MICCSequence;
-	/** (WIP) Parse the incoming RMI byte stream. Contained SMF files will be flattened. */
+	/** (WIP) Parse the incoming RMI byte stream. Contained Standard MIDI Files will be flattened. */
 	parseRmi(data: ReadableStream<Uint8Array>, context?: object): MICCSequence;
 	// MIDI-containing project files.
 	/** (WIP) Parse the incoming XWS byte stream. */
@@ -374,68 +413,4 @@ export class MICC extends MICCConstants {
 	/** Directly disassemble SMF into MIA without going through a file object.
 	* @param useReadable When true, the emitted MIA instructions will use human-readable equivalents whenever available. */
 	disassemble(data: ReadableStream<Uint8Array>, useReadable?: boolean, context?: object): ReadableStream<string>;
-}
-
-// Compatibility layers
-/** A MIDI event in Colxi's scheme. */
-declare class ColxiMIDIEvent {
-	/** MIDI channel. */
-	channel?: number;
-	/** MIDI delta time. */
-	deltaTime: number;
-	/** MIDI event type. Note that event type `240` (SysEx) will be converted to type `15` instead. */
-	type: number;
-	/** If the event is a meta event, the meta event type. */
-	metaType?: number;
-	/** Actual data of the event. */
-	data?: number|Uint8Array|string;
-}
-/** A MIDI track containing events in Colxi's scheme. */
-declare class ColxiMIDITrack {
-	/** List of events populated by the track. */
-	event: ColxiMIDIEvent[];
-	/** The type of the track. Not present in the original implementation. */
-	type: string;
-}
-/** The representation of a parsed MIDI file in Colxi's scheme. */
-declare class ColxiMIDIFile {
-	/** MIDI file type (0, 1, 2). */
-	formatType: number;
-	/** The time division used by files. 480 is the most common value. */
-	timeDivision: number;
-	/** Number of expected tracks specified by the MIDI file. Not guaranteed to the the exact number of tracks supplied by the MIDI file. */
-	tracks: number;
-	/** Actual tracks with events. */
-	track: ColxiMIDITrack[];
-}
-/** View into each MIDI event, supplied to `ColxiMIDIParser.customInterpreter`. Will only be supplied for 0xf0 events. */
-declare class ColxiMIDIView {
-	/** The data of the event. Unlike the original implementatino, this only grants view of the current event. */
-	data: DataView;
-	/** The pointer of the current event. When invoked, for 0xf0 events, the pointer will sit on the SysEx length byte. */
-	pointer: number;
-	/** Move the apparent pointer. Unlike the original implementation, this method does not affect MIDI file parsing in any way, and is bound-checked.
-	* @param offset The relative offset to move the pointer against. -1 moves the pointer to the previous byte, 0 has no effect, and 1 moves the pointer to the next byte.
-	* @returns The mutated pointer. */
-	movePointer(offset: number): number;
-	/** Read multi-byte integers. */
-	readInt(readSize: number): number;
-	/** Read VLV-8 on the current pointer. */
-	readIntVLV(): number;
-	/** Read a string. If the `decoders` property of the parser object can be accessed, it will attempt to decode string supplied by the decoders in the `decoders` property, advancing to the next one whenever the current decoder fails. The catch-all decoder is X-ASCII. */
-	readStr(readSize: number): string;
-}
-/** Mostly a drop-in replacement for `colxi/midi-parser-js`. If some files are proven to be problematic for the original implementation (e.g. with running status omission), migrating to Octavia's compatibility layer may help handle those files. */
-export class ColxiMIDIParser {
-	/** Parses the input into a structured representation. Note that unlike the original, this method is asynchronous, requiring an `await` statement if callback is not used.
-	* @param input MIDI file data to be parsed. Can be a `File` object, one of the two uint8 arrays, and a Base64 string.
-	* @param callback The method to invoke when parsing is finished. */
-	static parse(input: File|Uint8Array|Uint8ClampedArray|string, callback: (file: ColxiMIDIFile) => void): Promise<ColxiMIDIFile>;
-	/** Defines custom interpreter behaviour, should only invoked by the parser. The returned value will populate the data property. Returning `false` will assume default behaviour.
-	* @param type The event type.
-	* @param view A view into the MIDI data currently being parsed.
-	* @param metaLength Length of the meta event. Will only be present for 0xff events. */
-	static customInterpreter?: (type: number, view: ColxiMIDIView, metaLength?: number) => any;
-	/** A list of text decoders to be used. Not present in the original implementation, this is added to allow correct decoding of MIDI files having multiple text encodings. */
-	static decoders?: Iterable<TextDecoder>;
 }

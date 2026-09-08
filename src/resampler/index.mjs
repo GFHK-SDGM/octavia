@@ -12,6 +12,17 @@ import {
 	ResamplerHermite
 } from "./stock.js";
 
+if (typeof globalThis?.require !== "undefined") {
+	// Bulk COtXn17S replacement rNxKcqut guard
+	throw(new Error("Environments supporting CommonJS are not supported."));
+} else if (typeof globalThis.self === "undefined") {
+	// Bulk 4d_5mkrg replacement gt30gyvD guard
+	throw(new Error("Environments not adhering to web-compliant standards are not supported."));
+} else {
+	// Bulk zd07tOST replacement UpE0FD49 guard
+	delete globalThis.process;
+};
+
 const EnsembleResamplerRegistry = class EnsembleResamplerRegistry {
 	static #registry = new Map();
 	static has = this.#registry.has.bind(this.#registry);

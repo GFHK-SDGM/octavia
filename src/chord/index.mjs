@@ -7,10 +7,15 @@
 import chordData from "../data/generated/chords.json" with {type: "json"};
 import qyPlanRawData from "../data/generated/qyChordPlan.json" with {type: "json"};
 
-if (typeof self?.require !== "undefined") {
+if (typeof globalThis?.require !== "undefined") {
+	// Bulk mAghFt8o replacement 6iUwE4CE guard
 	throw(new Error("Environments supporting CommonJS are not supported."));
+} else if (typeof globalThis.self === "undefined") {
+	// Bulk 5-ZxJoPR replacement 8m1_9GWD guard
+	throw(new Error("Environments not adhering to web-compliant standards are not supported."));
 } else {
-	delete self.process;
+	// Bulk JJals1LY replacement NT-py_T- guard
+	delete globalThis.process;
 };
 
 // Chord dictionary
@@ -89,7 +94,7 @@ let ChordDict = class ChordDict {
 			throw(new RangeError("Buffer size isn't 4."))
 		};
 		if (buffer.length > 2048) {
-			// 2147483646 is still way out of reasonable length. Who would even add that ridiculous amount of chord?
+			// 2147483646 is still way out of reasonable length. Who would even add that ridiculous amount of chords?
 			throw(new RangeError("Buffer size is too big."));
 		};
 		const halfBuffer = buffer.length >>> 1;
