@@ -11,15 +11,11 @@ import type {
 	uint64
 } from "../nativeType/index.d.mts";
 
-/**
-* A safe tag-length-value byte stream handler. Can be customized to handle SMF, IFF, RIFF and more, under the umbrella of SEAM (Simple Extensible Arbitrary Messaging).
+/** A safe tag-length-value byte stream handler. Can be customized to handle SMF, IFF, RIFF and more, under the umbrella of SEAM (Simple Extensible Arbitrary Messaging).
 * @license LGPL-3.0-only
-* @module cc.ltgc.seamstress
-*/
+* @module cc.ltgc.seamstress */
 
-/**
-* Reading and writing various forms of numeric values.
-*/
+/** Reading and writing various forms of numeric values. */
 export class IntegerHandler {
 	/** When set to true, methods will use runtime-native APIs and WebAssembly over the pure-JS implementation. */
 	static useNative: boolean;
@@ -29,7 +25,7 @@ export class IntegerHandler {
 	static unsafeType: boolean;
 	/** Counts the total bits required to store an unsigned BigInt. `0` is `0`, parallel to `Math.clz32`. */
 	static bitsBigUint(value: bigint): number;
-	/** Counts the size of a standard MIDI VLV-8 value in bytes. Will return 0 when failed. */
+	/** Counts the size of a standard MIDI VLV-8 value in bytes, up to `16`. Will return `0` when failed (expected size goes over `16`). */
 	static sizeVLV(buffer: Uint8Array|Uint8ClampedArray, offset?: number): number;
 	/** Counts the size of an integer to be emitted as a standard MIDI VLV-8 value in bytes. Will return 0 when failed. */
 	static lengthVLV(value: number): number;
@@ -47,7 +43,7 @@ export class IntegerHandler {
 	static emitVLV(value: number): Uint8Array;
 	/** Writes a standard MIDI VLV-8 value to a `Uint8Array` or a `Uint8ClampedArray` from a standard JavaScript number. Will be clamped to 4 bytes, after which it will error out. */
 	static emitVLVBigInt(value: bigint): Uint8Array;
-	/** Counts the size of a reversible VLV-8 value in bytes. Will return 0 when failed. */
+	/** Counts the size of a reversible VLV-8 value in bytes, up to `16`. Will return 0 when failed (expected size goes over `16`). */
 	static sizeRVLV(buffer: Uint8Array|Uint8ClampedArray, offset?: number): number;
 	/** Counts the size of an integer to be emitted as a reversible VLV-8 value in bytes. Will return 0 when failed. */
 	static lengthRVLV(value: number): number;
@@ -75,9 +71,7 @@ export class IntegerHandler {
 	static readUint64(buffer: Uint8Array|Uint8ClampedArray, isLittleEndian?: boolean, offset?: number): uint64;
 }
 
-/**
-* The context object in use in a stream reading or writing session.
-*/
+/** The context object in use in a stream reading or writing session. */
 export interface SeamstressContext {
 	/** This field may not be present.
 	*
@@ -121,21 +115,23 @@ export interface SeamstressContext {
 	seamstressParentUse?: string;
 }
 
-/**
-* A subchunk of a Seamstress stream. Can be non-buffered, slightly buffered or fully buffered.
-*/
+/** A subchunk of a Seamstress stream. Can be non-buffered, slightly buffered or fully buffered. */
 export class SeamstressChunk {
 	/** Index of the (streamed) chunk in u32, starts from 0 and increases by 1 only when a new chunk is progressed. This is to easily differentiate chunks. */
-	id: number;
+	id: uint32;
 	/** Cumulative index of the current chunk in u32, starts from 0 and increases by 1 when a new chunk of the same type is progressed. */
-	chunkId: number;
+	chunkId: uint32;
+	/** Cumulative index of the current subchunk in u32, starts from 0 for every new chunk and increases by 1 when a new subchunk in the same chunk.
+	* 
+	* This field is always `0` for fully buffered chunks. */
+	sliceId: uint32;
 	/** Type of the current chunk as either integers or Latin-9 strings. */
 	type: number|string;
 	/** If the current chunk is a child of a parent chunk (e.g. `LIST`), this property will contain the full path of the current chunk. */
 	typePath?: string[];
 	/** If the current chunk is a child of a parent chunk (e.g. `LIST`), this property will contain the use (e.g. list chunk types) of all parent chunks. */
 	typeUses?: string[];
-	/** The offset of the current (sub)chunk. Chunks from `readChunk()` and the first chunk from `readStream()` have this value always set to `0`. */
+	/** The offset of the current (sub)chunk. Chunks from `readChunk()` and the first chunk from `readStream()` have this field always set to `0`. */
 	offset: number;
 	/** (WIP) The offset of the current data (sub)chunk compared to the rest of the scoped binary stream session. */
 	offsetStream: number;
@@ -160,12 +156,10 @@ export class SeamstressChunk {
 	* @param type Same as `SeamstressChunk.type`.
 	* @param offset Same as `SeamstressChunk.offset`.
 	* @param size Same as `SeamstressChunk.size`. */
-	constructor(id: number, chunkId: number, type: number|string, offset: number, size: number);
+	constructor(id: uint32, chunkId: uint32, type: number|string, offset: number, size: number);
 }
 
-/**
-* Strictly validated Seamstress binary stream serializer.
-*/
+/** Strictly validated Seamstress binary stream serializer. */
 export class SeamstressStrictWriter {
 	/** The result of the serialized stream. */
 	readable: ReadableStream<Uint8Array>;
@@ -181,13 +175,34 @@ export class SeamstressStrictWriter {
 	buffer(): Promise<ArrayBuffer>;
 }
 
-/**
-* A safe TLV reader and writer. Configure an instance to match the format you want to handle, then use the methods provided.
+/** A set of pre-defined format configurations to be used with `Seamstress`. Additional setup may still be required. */
+export class SeamstressPresets {
+	/** IFF-based format. Examples below.
+	* - `.aif`, `.aiff`: Apple AIFF. */
+	static readonly IFF: number;
+	/** RIFF-based format. Examples below.
+	* - `.bun`: Cakewalk Bundle.
+	* - `.dls`: Downloadable Sound.
+	* - `.rmi`: RIFF-contained Standard MIDI File.
+	* - `.wav`: Microsoft WAVE.
+	* - `.webp`: WebP. */
+	static readonly RIFF: number;
+	/** SMF-like format. Examples below.
+	* - `.mid`, `.kar`: Standard MIDI File.
+	* - `.xws`: XGworks Original File. */
+	static readonly SMF: number;
+	/** Cakewalk-like format. */
+	static readonly WRK: number;
+}
+
+/** A safe TLV reader and writer. Configure an instance to match the format you want to handle, then use the methods provided.
 * ```js
-* let binaryParser = new Seamstress();
 * // Configure Seamstress to handle Standard MIDI Files.
+* const binaryParser = new Seamstress(Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32 | Seamstress.PAD_NONE);
 * binaryParser.headerSize = 0;
-* binaryParser.type = Seamstress.TYPE_4CC | Seamstress.ENDIAN_B | Seamstress.LENGTH_U32;
+* // You can also use the preset directly.
+* const binaryParser = new Seamstress(SeamstressPresets.SMF);
+* binaryParser.headerSize = 0;
 * (async () => {
 * 	// If you want to read subchunks without any buffering guarantees.
 * 	for await (let subchunk of binaryParser.readStream(req.body)) {
@@ -197,40 +212,63 @@ export class SeamstressStrictWriter {
 * })().catch((err) => {
 * 	// Error handling here.
 * });
-* ````
-*/
+* ```` */
 export class Seamstress {
 	/** Masks endianness of length values. 0 for BE, 1 for LE.
 	*
 	* Big-endian VLV denotes VLV-8, while "little-endian VLV" denotes RVLV-8, despite RVLV-8 still being big endian. */
 	readonly MASK_ENDIAN: number;
+	/** Masks endianness of length values. 0 for BE, 1 for LE.
+	*
+	* Big-endian VLV denotes VLV-8, while "little-endian VLV" denotes RVLV-8, despite RVLV-8 still being big endian. */
 	static readonly MASK_ENDIAN: number;
 	/** Masks encoding of length values. 0 for VLV-8, 1 for u32. "Little-endian VLV-8" selects RVLV-8. */
 	readonly MASK_LENGTH: number;
+	/** Masks encoding of length values. 0 for VLV-8, 1 for u32. "Little-endian VLV-8" selects RVLV-8. */
 	static readonly MASK_LENGTH: number;
-	/** Masks the boolean of if the chunk payloads are padded or not. A true value will treat chunks as padded to even bytes. */
+	/** Masks the boolean of if the chunk payloads are padded or not. Check `Seamstress.PAD_*` for further information. */
 	readonly MASK_PADDED: number;
+	/** Masks the boolean of if the chunk payloads are padded or not. Check `Seamstress.PAD_*` for further information. */
 	static readonly MASK_PADDED: number;
 	/** Masks type of type chunks. 0 for VLV-8, 1 for byte (`u8`), 2 for FourCC (`i32be`). */
 	readonly MASK_TYPE: number;
+	/** Masks type of type chunks. 0 for VLV-8, 1 for byte (`u8`), 2 for FourCC (`i32be`). */
 	static readonly MASK_TYPE: number;
+	/** Use big endian layout for multi-byte values. */
 	readonly ENDIAN_B: number;
+	/** Use big endian layout for multi-byte values. */
 	static readonly ENDIAN_B: number;
+	/** Use little endian layout for multi-byte values. */
 	readonly ENDIAN_L: number;
+	/** Use little endian layout for multi-byte values. */
 	static readonly ENDIAN_L: number;
+	/** Use MIDI VLV-8 for chunk sizes. */
 	readonly LENGTH_VLV: number;
+	/** Use MIDI VLV-8 for chunk sizes. */
 	static readonly LENGTH_VLV: number;
+	/** Use unsigned 32-bit integer for chunk sizes. */
 	readonly LENGTH_U32: number;
+	/** Use unsigned 32-bit integer for chunk sizes. */
 	static readonly LENGTH_U32: number;
+	/** Disable chunk padding. */
 	readonly PAD_NONE: number;
+	/** Disable chunk padding. */
 	static readonly PAD_NONE: number;
+	/** Pad chunks to even bytes. */
 	readonly PAD_EVEN: number;
+	/** Pad chunks to even bytes. */
 	static readonly PAD_EVEN: number;
+	/** Use MIDI VLV-8 for chunk types. */
 	readonly TYPE_VLV: number;
+	/** Use MIDI VLV-8 for chunk types. */
 	static readonly TYPE_VLV: number;
+	/** Use unsigned 8-bit integer for chunk types. */
 	readonly TYPE_UI8: number;
+	/** Use unsigned 8-bit integer for chunk types. */
 	static readonly TYPE_UI8: number;
+	/** Use FourCC as strings for chunk types. */
 	readonly TYPE_4CC: number;
+	/** Use FourCC as strings for chunk types. */
 	static readonly TYPE_4CC: number;
 	/** Set to true to emit verbose debug messages. */
 	debugMode: boolean;
@@ -256,9 +294,13 @@ export class Seamstress {
 	* @param buffer The header getting passed into the handler.
 	* @returns The parsed object that will modify the reader behaviour and provide as the initial context for the streams. */
 	headerHandler?(buffer: Uint8Array): SeamstressContext|undefined;
-	/** Regulates the incoming stream into desired subchunks, specified manually. Called by `Seamstress.regulateStream()`. When defined, the method receives the incoming stream chunk buffer first, and its return value is used to truncate the chunk for the stream reader.
+	/** Regulates the incoming stream into desired subchunks, specified manually. Called by `Seamstress.regulateStream()`. When defined, the method receives the incoming stream chunk buffer first, and its return value is used to truncate the current chunk for the stream reader.
 	*
-	* A non-zero value will cause the specified length from the current subchunk to be emitted, which the process repeats until the current subchunk depletes or the method returns a zero. A zero cause the current remaining section to be buffered and prepended to the next subchunk, until the entire chunk ends causing a forced flush, essentially making an all-zero regulated stream a fully-buffered stream. Any other numeric values will cause an error.
+	* A non-zero value will cause the specified length from the current subchunk to be emitted, which the process repeats until the current subchunk depletes or the method returns a zero.
+	*
+	* When the method returns a `0`, it will cause the current remaining section to be buffered and prepended to the next subchunk, until the entire chunk ends causing a forced flush, essentially making an all-zero regulated stream a fully-buffered stream. The views of subsequent chunks handed to the regulator method will be supplied as-is without merging. Use `SeamstressChunk.context` to have state persist across subchunk.
+	*
+	* Any other numeric values will cause an error.
 	* @param startOffset The intended read start offset of the provided buffer.
 	* @param chunkInfo The unmodified info of the current (sub)chunk. */
 	regulateStream?(startOffset: number, chunkInfo: SeamstressChunk): number;

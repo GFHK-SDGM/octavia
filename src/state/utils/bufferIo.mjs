@@ -45,7 +45,7 @@ for (let [key, value] of bufferMaps[0]) {
 * @param {string} lastChunkHandling
 * @param {number} maxLength
 * @returns {Uint8Array} */
-const bufferFrom = function bufferFrom (alphabet = "base64", string, lastChunkHandling = "loose", maxLength = 536870911) {
+const bufferFrom = function bufferFrom(alphabet = "base64", string, lastChunkHandling = "loose", maxLength = 536870911) {
 	if (typeof string !== "string") {
 		throw(new TypeError("Input is not a string."));
 	};
@@ -226,7 +226,205 @@ const bufferCarveOut = function (buffer, carvedList = []) {
 	}
 };
 
+/** @param {number[]} sourceBuffer
+* @param {Uint8Array|Uint8ClampedArray} targetBuffer
+* @returns {void} */
+const bitFieldPackA = (sourceBuffer, targetBuffer, options) => {
+	const threshold = options?.threshold > 0 ? options.threshold : 1;
+	for (let i = 0; i < sourceBuffer.length; i ++) {
+		targetBuffer[i >>> 3] |= (sourceBuffer[i] >= threshold ? 1 : 0) << (i & 7);
+	};
+};
+/** @param {number[]} sourceBuffer
+* @param {Uint8Array|Uint8ClampedArray} targetBuffer
+* @returns {void} */
+const bitFieldPackB = (sourceBuffer, targetBuffer, options) => {
+	const threshold = options?.threshold > 0 ? options.threshold : 1;
+	let buffered = 0;
+	for (let i = 0; i < sourceBuffer.length; i ++) {
+		buffered |= (sourceBuffer[i] >= threshold ? 1 : 0) << (i & 7);
+		if ((i & 7) === 7) {
+			targetBuffer[i >>> 3] = buffered;
+			buffered = 0;
+		};
+	};
+	if (buffered > 0) {
+		targetBuffer[targetBuffer.length - 1] = buffered;
+	};
+};
+/** @param {number[]} sourceBuffer
+* @param {Uint8Array|Uint8ClampedArray} targetBuffer
+* @returns {Uint8Array} */
+const bitFieldPack = (sourceBuffer, targetBuffer, options = {
+	"strict": true,
+	"threshold": 1
+}) => {
+	if (typeof sourceBuffer?.length !== "number") {
+		throw(new SyntaxError("The source buffer must be an array-like object."));
+	} else if (sourceBuffer.length >= 0x80000000) {
+		throw(new RangeError("Source buffer too large."));
+	};
+	const desiredSize = (sourceBuffer.length >>> 3) + (sourceBuffer.length & 7 ? 1 : 0);
+	switch (targetBuffer?.constructor) {
+		case Uint8Array:
+		case Uint8ClampedArray: {
+			if (targetBuffer.length >= 0x10000000) {
+				throw(new RangeError("Target buffer too large."));
+			} else if (options?.strict && targetBuffer.length < desiredSize) {
+				throw(new RangeError("The target buffer cannot satisfy the packed bit field."));
+			};
+			break;
+		};
+		default: {
+			if (targetBuffer == null) {
+				targetBuffer = new Uint8Array(desiredSize);
+			} else {
+				throw(new TypeError("The target buffer must be an Uint8Array."));
+			};
+		};
+	};
+	if (globalThis.Deno && sourceBuffer.length >= 395264) {
+		bitFieldPackA(sourceBuffer, targetBuffer, options);
+	} else {
+		bitFieldPackB(sourceBuffer, targetBuffer, options);
+	};
+	return targetBuffer;
+};
+/** @param {Uint8Array|Uint8ClampedArray} sourceBuffer
+* @param {number[]} targetBuffer
+* @returns {Uint8Array} */
+const bitFieldUnpack = (sourceBuffer, targetBuffer, options = {
+	"maxSize": 0,
+	"strict": true,
+	"value": 1
+}) => {
+	switch (sourceBuffer?.constructor) {
+		case Uint8Array:
+		case Uint8ClampedArray: {
+			if (sourceBuffer.length >= 0x10000000) {
+				throw(new RangeError("Source buffer too large."));
+			};
+			break;
+		};
+		default: {
+			throw(new TypeError("The source buffer must be an Uint8Array."));
+		};
+	};
+	let desiredSize = sourceBuffer.length << 3;
+	const maxSize = options?.maxSize ?? 0;
+	if (maxSize > 0) {
+		desiredSize = Math.min(desiredSize, maxSize);
+	};
+	//console.debug(sourceBuffer.length, desiredSize);
+	if (targetBuffer) {
+		if (typeof targetBuffer?.length !== "number") {
+			throw(new SyntaxError("The target buffer must be an array-like object."));
+		} else if (targetBuffer.length >= 0x80000000) {
+			throw(new RangeError("Target buffer too large."));
+		};
+		if (options?.strict && targetBuffer.length < desiredSize) {
+			throw(new Error("The target buffer cannot satisfy the packed bit field."));
+		};
+	} else {
+		targetBuffer = new Uint8Array(desiredSize);
+	};
+	const value = options?.value > 0 ? options.value : 0;
+	let rollingByte = 0;
+	for (let i = 0; i < desiredSize; i ++) {
+		if (i & 7) {
+			rollingByte >>= 1;
+		} else {
+			rollingByte = sourceBuffer[i >>> 3];
+		};
+		targetBuffer[i] = (rollingByte & 1) ? value : 0;
+	};
+	return targetBuffer;
+};
+
+/** @param {number} size
+* @param {number} threshold*/
+const runLengthSubtract = (size, threshold) => {
+	if (size > threshold) {
+		return size - threshold - 1; // 
+	} else if (size === threshold) {
+		return -1;
+	} else {
+		return 0;
+	};
+};
+/** @param {Uint8Array|Uint8ClampedArray} buffer */
+const encodeRunLength = function (buffer, repeatThreshold = 4) {
+	if (!(Number.isSafeInteger(repeatThreshold) && repeatThreshold >= 2)) {
+		throw(new RangeError(`Repeat threshold must be an integer larger than 1.`));
+	};
+	switch (buffer.constructor) {
+		case Uint8Array:
+		case Uint8ClampedArray: {
+			if (buffer.length <= 0) {
+				throw(new RangeError("The buffer must not be empty."));
+			};
+			break;
+		};
+		default: {
+			throw(new TypeError("The buffer must be an Uint8Array."));
+		};
+	};
+	// Length calculation pass.
+	const sizeCriterion = 127 + repeatThreshold; // Prepare for later integration with MIDI-style VLV-8.
+	let requiredSize = buffer.length;
+	let lastByte = buffer[0], repeatSize = 1;
+	for (let i = 1; i < buffer.length; i ++) {
+		const e = buffer[i];
+		if (e === lastByte) {
+			repeatSize ++;
+		};
+		if (repeatSize >= sizeCriterion || e !== lastByte) {
+			requiredSize -= runLengthSubtract(repeatSize, repeatThreshold);
+			repeatSize = 0;
+		};
+		lastByte = e;
+	};
+	if (repeatSize > 0) {
+		requiredSize -= runLengthSubtract(repeatSize, repeatThreshold);
+	};
+	// Compression pass. REQUIRES FULL REWRITE!
+	const compressed = new Uint8Array(requiredSize);
+	compressed[0] = buffer[0];
+	lastByte = buffer[0], repeatSize = 1;
+	let compressedPointer = 1, byteUnwritten = true;
+	for (let i = 1; i < buffer.length; i ++) {
+		const e = buffer[i];
+		if (e === lastByte) {
+			repeatSize ++;
+		};
+		if (repeatSize >= sizeCriterion || e !== lastByte) {
+			if (repeatSize >= repeatThreshold) {
+				// Can be enhanced with VLV here!
+				compressed[compressedPointer] = repeatSize - repeatThreshold;
+				compressedPointer ++;
+				compressed[compressedPointer] = e;
+				compressedPointer ++;
+				byteUnwritten = false;
+			};
+			repeatSize = 0;
+		};
+		if (repeatSize <= repeatThreshold && byteUnwritten) {
+			compressed[compressedPointer] = e;
+			compressedPointer ++;
+		};
+		lastByte = e;
+		byteUnwritten = true;
+	};
+	if (repeatSize >= repeatThreshold) {
+		compressed[compressedPointer] = repeatSize - repeatThreshold;
+		compressedPointer ++;
+	};
+	return compressed;
+};
+
 export {
+	bitFieldPack,
+	bitFieldUnpack,
 	bufferFrom,
 	bufferTo,
 	bufferCarveOut

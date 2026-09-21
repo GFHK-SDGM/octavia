@@ -16,25 +16,6 @@ import type {
 	SeamstressContext
 } from "../../libs/seamstress@ltgcgo/seamstress/index.d.mts";
 
-/** The helper string decoder allowing re-interpretation. */
-export class BinaryString {
-	/** The attached list of decoders. When all of them fail, Latin 9 will be the fallback. Defaults to UTF-8 only. */
-	decoders?: Iterable<TextDecoder>;
-	/** The attached buffer to decode. */
-	buffer?: Uint8Array|Uint8ClampedArray;
-	/** The decoded result. */
-	text?: string;
-	/** The text encoding label used in the decoded result. */
-	label?: string;
-	/** Decode the buffer, both return it and overwrite the `text` property. Will error out if there's no attached buffer.
-	* @param buffer When this argument is supplied, the `buffer` property will be overridden with it. */
-	decode(buffer?: Uint8Array|Uint8ClampedArray): string;
-	/** Encode the result into a buffer, both return it and overwrite the `buffer` property. Defaults to UTF-8 encoding with no labels. Will error out if there's no attached text.
-	* @param text When this argument is supplied, the `text` property will be overridden with it.
-	* @param label When this argument is supplied, the `label` property will be overridden with it. */
-	encode(text?: string, label?: string): Uint8Array;
-}
-
 // Native implementations
 /** Utility constants for MICC. */
 declare class MICCConstants {
@@ -100,6 +81,8 @@ declare class MICCConstants {
 	static readonly FILE_SMF_KORG_SONG: uint16;
 	/** File type: Cakewalk project. */
 	static readonly FILE_SEQ_CAKEWALK: uint16;
+	/** File type: REAPER project. */
+	static readonly FILE_SEQ_REAPER: uint16;
 	/** File type: Sequence Object Linking project. */
 	static readonly FILE_SEQ_SOL: uint16;
 	/** File type: XGworks project. */
@@ -193,29 +176,39 @@ declare interface MICCSMFMIAParserContext {
 	lastSysExHung?: boolean;
 }
 declare interface MICCSMFMIAHandleOptions {
-	/** Provides optional binary stream context for parsing. */
-	streamContext?: SeamstressContext;
-	/** Setting this to true will include delta time parsing. Defaults to `false.` */
-	hasDelta?: boolean;
+	/** An optional object to attach assembly status to. */
+	asmContext?: MICCSMFMIAParserContext;
 	/** An optional object to attach parsing status to. */
 	parserContext?: MICCSMFMIAParserContext;
+	/** Provides optional binary stream context for parsing. */
+	streamContext?: SeamstressContext;
+	/** A set of text decoders to use. Starting from the first, if the current decoder fails, the next decoder will be used. If all specified decoders fail, or this property is empty, X-ASCII will be used. */
+	decoders: Iterable<TextDecoder>;
+	/** Setting this to true will include delta time parsing. Defaults to `false.` */
+	hasDelta?: boolean;
 	/** If the event has been wrapped in SMF. This can affect how parsers and serialisers function. */
 	isSmfWrapped?: boolean;
 	/** Should the parser ignore some safety checks for potentially large messages. */
 	loosenForSpeed?: boolean;
+	/** When `true`, disassemblers will prefer the readable alternative syntax whenever available. */
+	preferReadable?: boolean;
 }
 /** Internal methods for MIA assembly and disassembly. */
 export class MICCInternalsMIA {
 	/** Convert single MIA lines into split tokens. Rejects with leading colons (`:`). */
 	static lexLine(text: string): string[];
-	/** Disassemble single raw MIDI events into MIA lines directly. */
-	static dasmSingleEvent(buffer: Uint8Array|Uint8ClampedArray|SeamstressChunk, options?: MICCSMFMIAHandleOptions): string;
-	/** Stringify parsed MIDI events into MIA lines. */
-	static emitSingleEvent(event: MIDINakedEvent, options?: MICCSMFMIAHandleOptions): string;
-	/** Assemble single MIA lines into raw MIDI events directly. */
-	static asmSingleEvent(text: string, options?: MICCSMFMIAHandleOptions): Uint8Array;
 	/** Parse single MIA lines into parsed MIDI events. */
 	static parseSingleEvent(text: string, options?: MICCSMFMIAHandleOptions): MIDINakedEvent;
+	/** Stringify parsed SMF header chunk into MIA lines. */
+	static emitHeaderSMF(metadata: MICCSequenceMetadata): Generator<string, void, any>;
+	/** Stringify parsed MIDI events into MIA lines. */
+	static emitSingleEvent(event: MIDINakedEvent, options?: MICCSMFMIAHandleOptions): string;
+	/** Disassemble SMF header chunk into MIA lines. */
+	static dasmHeaderSMF(buffer: Uint8Array|Uint8ClampedArray|SeamstressChunk): Generator<string, void, any>;
+	/** Disassemble single raw MIDI events into MIA lines directly. */
+	static dasmSingleEvent(buffer: Uint8Array|Uint8ClampedArray|SeamstressChunk, options?: MICCSMFMIAHandleOptions): string;
+	/** Assemble single MIA lines into raw MIDI events directly. */
+	static asmSingleEvent(text: string, options?: MICCSMFMIAHandleOptions): Uint8Array;
 }
 /** Internal methods for MIDI 1.0/SMF parsing and serialising. */
 export class MICCInternalsSMF {
@@ -225,11 +218,11 @@ export class MICCInternalsSMF {
 	static parseSingleEvent(buffer: Uint8Array|Uint8ClampedArray|SeamstressChunk, options?: MICCSMFMIAHandleOptions): MIDINakedEvent;
 	/** Serialise single parsed MIDI events into clean buffers. */
 	static emitSingleEvent(event: MIDINakedEvent, options?: MICCSMFMIAHandleOptions): Uint8Array;
-	/** Parse raw MIDI events from buffers, which doesn't guarantee the buffer itself to be clean. For raw event ingestion only, like from real-time MIDI port IO.
+	/** Parse _raw_ MIDI events from buffers, which doesn't guarantee the buffer itself to be clean. For raw event ingestion only, like from real-time MIDI port IO.
 	* @param buffer The input buffer.
 	* @param options Parser options. Only reuse the same options object for a single port in a single MIDI 1.0 session. */
 	static parseRawEvents(buffer: Uint8Array|Uint8ClampedArray, options?: MICCSMFMIAHandleOptions): Generator<MIDINakedEvent, void, any>;
-	/** Regulates the incoming SMF stream. Set as `Seamstress.regulateStream()`. */
+	/** Regulates the incoming _SMF_ stream. Set as `Seamstress.regulateStream()`. */
 	static streamRegulator(offset: number, subchunk: SeamstressChunk): number;
 }
 /** A pointer to the actual clip tracks.
@@ -383,8 +376,8 @@ export class MICCSequence {
 	markReady(): Promise<void>;
 	/** Resolves when full usability is met, e.g. the finaliser has been run. Will reject when the parser fails with parser error. */
 	finalised: Promise<void>;
-	/** When set to true, the finaliser will not be called, and the related promise will resolve instantly when the raw data has been fully parsed. */
-	noFinalization: boolean;
+	/** When set to `false`, the finaliser will not be called, and the related promise will resolve instantly when the raw data has been fully parsed. */
+	enableFinalisation: boolean;
 	/** Used by parsers to mark the file as finalised. */
 	markFinalised(): Promise<void>;
 	/** Runs the finalization process. Re-runs are useful for programs that mutate events, e.g. editors. */

@@ -14,6 +14,7 @@ on:
       - "sh/esbuild"
       - "sh/live.sh"
       - "sh/validate.sh"
+      - "sh/validatorSetup.sh"
       - "src/**"
       - "!src/*/index.d.mts"
       - "validate/**"
@@ -35,6 +36,7 @@ on:
       - "sh/esbuild"
       - "sh/live.sh"
       - "sh/validate.sh"
+      - "sh/validatorSetup.sh"
       - "src/**"
       - "!src/*/index.d.mts"
       - "validate/**"
@@ -43,7 +45,7 @@ on:
 
 # Allow one concurrent deployment
 concurrency:
-  group: "validate"
+  group: "validator"
   cancel-in-progress: true
 
 jobs:
@@ -59,7 +61,13 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: latest
+      - name: Generate data for Octavia
+        run: "./shx generate"
       - name: Build Octavia files
         run: "./shx build"
+      - name: Configure the validator environment
+        run: "./shx validatorSetup"
       - name: Validate MICC SMF parser and serialiser
-        run: "./shx validate miccSmf.js"
+        run: "./shx validate micc/smf.js"
+      - name: Validate MICC lossless canonical roundtrip routes
+        run: "./shx validate micc/lcr.js"

@@ -10,6 +10,10 @@ on:
       - 'src/*/index.d.mts'
   workflow_dispatch:
 
+concurrency:
+  group: "publish"
+  cancel-in-progress: false
+
 jobs:
   publish:
     if: github.repository == 'ltgcgo/octavia'
@@ -27,5 +31,9 @@ jobs:
         with:
           deno-version: latest
 
+      - name: Generate data for Octavia
+        run: "./shx generate"
+      - name: Build Octavia files
+        run: "./shx build"
       - name: Publish package
         run: "./shx publish"
